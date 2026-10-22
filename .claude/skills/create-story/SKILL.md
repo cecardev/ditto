@@ -39,14 +39,18 @@ Crea una story como GitHub Issue en el repo de ditto siguiendo las convenciones 
 
 La fase del hito, usando `milestones` del config (`Fase 1 — MVP`, …). Sin hito → sin milestone.
 
-### Dependencias
+### Dependencias (obligatorias)
 
-Una línea por dependencia en la sección *Dependencias*, con este formato exacto (los skills la parsean):
+Toda story tiene la sección *Dependencias*: `develop-batch` la usa para decidir qué corre en paralelo y qué en serie. Una línea por dependencia **directa**, con este formato exacto (los skills la parsean):
 
 ```
 Depende de: #12
 Depende de: #15
 ```
+
+Sin dependencias: `Depende de: ninguna` (explícito, nunca vacío).
+
+Una story depende de otra si necesita su código (tipos, paquetes), su decisión (un spike) o si el roadmap la ordena antes. Que compartan área no basta: eso es un posible conflicto de merge que `develop-batch` gestiona aparte.
 
 ### Body
 
@@ -71,6 +75,8 @@ Si vienen pre-llenados (desde `generate-stories`), solo confirmar. Si no, pregun
 
 Con el hito, leer su entrada en `roadmap.md` y las secciones de `arch.md` relevantes para redactar contexto y criterios.
 
+Para el **Plan técnico**, investigar el código existente con el protocolo de `CLAUDE.md`: `graphify query "<objetivo de la story>"` y `graphify explain "<tipo o paquete>"` para nombrar los archivos y símbolos reales que se tocan o reutilizan (en lugar de suponerlos), y `graphify path` para detectar dependencias de código con otras stories. Si no hay grafo o código aún, basarse en arch.md §5/§16.
+
 ## Paso 2 — Asegurar labels y milestone
 
 ```sh
@@ -84,7 +90,9 @@ gh api repos/<repo>/milestones --jq '.[].title'
 
 ## Paso 3 — Validar dependencias
 
-Para cada `#N`: `gh issue view N --repo <repo> --json number,title,state`. Si no existe, avisar y pedir corrección. Informar las que ya están cerradas.
+- Si no se indicaron dependencias, proponerlas a partir del orden del roadmap y del código que la story necesita, y pedir confirmación. Si de verdad no hay, `Depende de: ninguna`.
+- Para cada `#N`: `gh issue view N --repo <repo> --json number,title,state,body`. Si no existe, avisar y pedir corrección. Informar las que ya están cerradas.
+- **Ciclos**: si alguna `#N` depende (directa o transitivamente, siguiendo sus `Depende de:`) de una story que a su vez depende de esta, detener y mostrar el ciclo.
 
 ## Paso 4 — Mostrar borrador y crear
 

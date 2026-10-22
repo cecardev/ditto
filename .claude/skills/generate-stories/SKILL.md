@@ -31,8 +31,9 @@ Toda interacción con GitHub se hace con **`gh`**. No usar el MCP de GitHub.
 
 ## Paso 2 — Estado real del repo
 
-Recolectar evidencia, no suposiciones:
+Recolectar evidencia, no suposiciones. Seguir el **protocolo de investigación** de `CLAUDE.md` (graphify primero):
 
+- `graphify update .` y leer `graphify-out/GRAPH_REPORT.md`: paquetes, tipos y conexiones reales. Para cada hito candidato, `graphify query "<qué pide el hito>"` para saber si ya hay código que lo cubra total o parcialmente. Si no hay grafo o aún no hay código, usar Grep/Glob y decirlo.
 - `git log --oneline -30` y `git status`.
 - ¿Existe `go.mod`? Paquetes presentes bajo `internal/` y `cmd/` vs. los de arch.md §16.
 - Tests existentes (`*_test.go`), `.github/workflows/`, `.goreleaser.yaml`, `install.sh`, `manifest/components.toml`, `embed/`.
@@ -66,6 +67,17 @@ Reglas:
 - Tamaño: `XS` 1-2 h · `S` medio día · `M` 1 día · `L` 2-3 días.
 - Si se detectan inconsistencias o huecos en la documentación, proponer una story `type:docs` en lugar de inventar diseño.
 
+### Dependencias (obligatorias en cada propuesta)
+
+Toda propuesta declara sus dependencias, o `ninguna` de forma explícita. `develop-batch` construye el grafo con ellas, así que deben ser completas y mínimas (solo las directas, sin repetir las transitivas). Fuentes, en orden:
+
+1. **Orden del roadmap** (*Orden y dependencias*): el hito predecesor.
+2. **Decisiones**: si la story implementa algo marcado *(spike H…)*, depende del issue de ese spike.
+3. **Código**: si usa tipos o paquetes que crea otra story (p. ej. `resolve` usa `manifest` y `platform`), depende de ella. Para código ya existente, confirmar la relación con `graphify path "<A>" "<B>"`.
+4. **División de un hito**: entre las partes de un hito dividido, solo las aristas reales. Si dos partes son independientes, no se encadenan.
+
+Referenciar issues existentes por número (`#N`) y propuestas del mismo lote por su índice (`P2`). Al crearlas, los índices se sustituyen por los números reales. Comprobar que no haya ciclos.
+
 ## Paso 5 — Presentar propuestas
 
 ```
@@ -76,21 +88,32 @@ ESTADO
 - Inconsistencias detectadas: <lista o "ninguna">
 
 PROPUESTAS
-1. [H0.1] Spike: mise aislado en .ditto/
-   type:spike · area:installer · priority:alta · size:M · Fase 0
-   Depende de: ninguna
-   Por qué ahora: <1 línea>
-   Criterios (resumen): <2-3 bullets del roadmap>
-2. ...
+P1. [H0.1] Spike: mise aislado en .ditto/
+    type:spike · area:installer · priority:alta · size:M · Fase 0
+    Depende de: ninguna
+    Por qué ahora: <1 línea>
+    Criterios (resumen): <2-3 bullets del roadmap>
+P2. [H0.1b] Spike: ¿hasta dónde llega mise solo?
+    type:spike · area:launcher · priority:alta · size:M · Fase 0
+    Depende de: P1
+P3. ...
+
+GRAFO
+  P1 ──► P2 ──► P4
+  P3 (independiente)
+  #7 (existente, abierta) ──► P5
+Paralelizables desde el inicio: P1, P3
 ```
 
-Ordenar por camino crítico. Máximo ~8 propuestas por ejecución.
+Ordenar por camino crítico. Máximo ~8 propuestas por ejecución. Si una propuesta depende de un issue existente que sigue abierto, señalarlo en el grafo.
 
 ## Paso 6 — Crear las aprobadas
 
 Preguntar: *"¿Cuáles creo? (números separados por coma, 'todas' o 'ninguna')"*.
 
-Para cada una aprobada, seguir el skill **`create-story`** con los datos ya llenos (título, labels, milestone, dependencias, criterios, plan técnico). Crear en orden de dependencias para poder referenciar los números reales en `Depende de:`.
+Para cada una aprobada, seguir el skill **`create-story`** con los datos ya llenos (título, labels, milestone, dependencias, criterios, plan técnico). Crear en **orden topológico** para sustituir los índices `P<n>` por los números reales en `Depende de:`. Si el usuario aprueba una propuesta pero no su dependencia `P<n>`, avisar y preguntar si se crea igual (la dependencia quedaría sin issue) o se incluye.
+
+Al terminar, sugerir `/develop-batch <números creados>` si hay más de una.
 
 ## Notas
 

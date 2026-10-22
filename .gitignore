@@ -1,0 +1,8 @@
+# graphify (grafo local del código; se regenera con `graphify update .`)
+graphify-out/
+
+# Claude Code: ajustes locales del usuario
+.claude/settings.local.json
+
+# Entorno de ditto si se prueba dentro del repo
+.ditto/

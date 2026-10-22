@@ -35,4 +35,5 @@
 
 ## Dependencias
 
-Depende de: <#N o "ninguna">
+<!-- Una línea por dependencia directa: "Depende de: #N". Sin dependencias: "Depende de: ninguna". -->
+Depende de: <#N | ninguna>

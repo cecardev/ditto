@@ -25,7 +25,7 @@ Si el alcance está vacío (sin diff, directorio inexistente), decirlo y termina
 
 ## Paso 2 — Checks automáticos
 
-Si existe `go.mod`, ejecutar `verify.commands` y los `verify.optional` cuya herramienta esté instalada. Guardar el resultado para el reporte; no detenerse si fallan.
+Ejecutar `graphify update .` para que el revisor consulte el grafo de la rama actual (si graphify no está instalado, seguir; el revisor usará Grep). Si existe `go.mod`, ejecutar `verify.commands` y los `verify.optional` cuya herramienta esté instalada. Guardar el resultado para el reporte; no detenerse si fallan.
 
 ## Paso 3 — Revisión
 

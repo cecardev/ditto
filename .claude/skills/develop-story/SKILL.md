@@ -40,7 +40,11 @@ Leer, en este orden:
 1. `docs.codeStandards` **completo**. Es la fuente de verdad de cómo escribir el código. Si no existe, avisar y seguir las convenciones del código existente.
 2. Las secciones de `docs.architecture` enlazadas en el issue, más §5 (módulos) y §16 (estructura).
 3. La entrada del hito en `docs.roadmap` y la *Definición de "hecho"*.
-4. El código existente del área (`internal/<area>/`) y sus tests, para reutilizar tipos y helpers antes de crear nuevos.
+4. El código existente, con el **protocolo de investigación** de `CLAUDE.md` (graphify primero, Grep/Glob como fallback):
+   - `graphify update .` (el grafo debe reflejar la rama actual).
+   - `graphify query "<objetivo de la story>"` y `graphify explain "<símbolo>"` para cada tipo o paquete del *Plan técnico*: qué existe, quién lo usa, qué se puede reutilizar antes de crear algo nuevo.
+   - `graphify path "<lo que cambia>" "<consumidores>"` para medir el impacto de modificar algo existente.
+   - Leer con Read solo los archivos que el grafo señale, más sus tests.
 
 Si el issue contradice arch.md, señalarlo y preguntar cuál manda. No resolverlo en silencio.
 
@@ -75,7 +79,7 @@ Si `verify.requiresGoMod` y no existe `go.mod` (antes de H1.1), saltar los coman
 2. Cross-build de cada target de `verify.crossBuild`:
    `CGO_ENABLED=0 GOOS=<os> GOARCH=<arch> go build ./...`
 3. `verify.optional`: ejecutar solo si la herramienta está instalada; si no, indicarlo.
-4. **Revisión con contexto limpio:** lanzar el agente **`standards-reviewer`** con el diff (`git diff <defaultBranch>...`), la ruta de `docs.codeStandards`, la de `docs.architecture` y los criterios de aceptación. Corregir los `ERROR` con fundamento y repetir la verificación; los `WARNING` se corrigen o se justifican en el PR.
+4. **Revisión con contexto limpio:** ejecutar `graphify update .` para que el grafo incluya los cambios y lanzar el agente **`standards-reviewer`** con el diff (`git diff <defaultBranch>...`), la ruta de `docs.codeStandards`, la de `docs.architecture` y los criterios de aceptación. Corregir los `ERROR` con fundamento y repetir la verificación; los `WARNING` se corrigen o se justifican en el PR.
 5. **Linux:** si la *Verificación manual* del issue incluye Linux y ya existe `cmd/ditto`, lanzar **`platform-tester`** con el escenario del issue y `platforms.defaultMatrix`. Lo que no pueda cubrir queda como verificación manual pendiente.
 6. Recorrer los criterios de aceptación uno por uno y anotar la evidencia de cada uno (test, comando o archivo:línea).
 

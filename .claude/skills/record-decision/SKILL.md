@@ -30,6 +30,7 @@ Leer `docs.architecture` y `docs.roadmap` completos y buscar:
 - Secciones que describen el comportamiento que cambia, aunque no estén marcadas (buscar por términos clave con grep).
 - Riesgos de §18 que se resuelven o aparecen.
 - Hitos del roadmap cuyo alcance o criterio cambia, y el checkbox del hito de origen.
+- **Código afectado** (protocolo de investigación de `CLAUDE.md`): `graphify update .` y `graphify query "<alternativa descartada>"` / `graphify explain "<símbolo>"` para encontrar código que implemente o asuma la opción descartada. Si existe, proponer una story (`/create-story`) para adaptarlo; esta skill no edita código.
 
 ## Paso 3 — Proponer los cambios
 
