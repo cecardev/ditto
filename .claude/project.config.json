@@ -72,6 +72,9 @@
       "status:in-progress": { "color": "1d76db", "description": "En desarrollo" },
       "status:in-review": { "color": "0052cc", "description": "PR abierto" },
       "status:blocked": { "color": "000000", "description": "Bloqueada por dependencia o decisión" }
+    },
+    "execution": {
+      "manual-only": { "color": "e99695", "description": "Solo puede hacerlo una persona; ningún agente lo desarrolla" }
     }
   },
   "platforms": {
@@ -90,7 +93,9 @@
   "batch": {
     "maxParallel": 3,
     "strategy": "stack",
-    "maxFixRounds": 2
+    "maxFixRounds": 2,
+    "branchPattern": "batch/{slug}",
+    "pr": "single"
   },
   "verify": {
     "requiresGoMod": true,

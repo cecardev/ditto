@@ -14,7 +14,8 @@ Skills y agentes para llevar ditto del roadmap a código, con GitHub Issues como
                                                          └─ /record-decision    (spikes → arch.md)
 
 /develop-batch <#N …|fase n|hito Hx.y>: grafo de dependencias → plan en oleadas → confirmación
-  → N × story-developer (worktrees en paralelo) → standards-reviewer / platform-tester → PR por story
+  → N × story-developer (worktrees en paralelo) → standards-reviewer / platform-tester
+  → integración en batch/<slug> → un solo PR para el lote (un Closes #N por story)
 /check-standards: self-review en cualquier momento
 ```
 
@@ -26,7 +27,7 @@ Skills y agentes para llevar ditto del roadmap a código, con GitHub Issues como
 | `generate-stories` | `/generate-stories [fase\|hito]` | Lee arch.md, roadmap.md y project.md, revisa el estado real del repo y los issues, y propone las siguientes stories respetando el orden del roadmap y las decisiones pendientes. Crea solo las aprobadas (vía `create-story`). |
 | `create-story` | `/create-story [hito o descripción]` | Plantilla y convenciones de los issues: título `[H1.2] área: …`, labels `type/area/priority/size`, milestone por fase, `Depende de: #N`, body de [story](skills/create-story/templates/story.md) o [spike](skills/create-story/templates/spike.md). Crea labels y milestones faltantes. |
 | `develop-story` | `/develop-story <N>` | Lee el issue con `gh`, valida dependencias, carga [docs/code_standards.md](../docs/code_standards.md) y arch.md, crea la rama, implementa con tests, verifica (gofmt, vet, `go test -race`, cross-build de 4 targets, `standards-reviewer`, `platform-tester`), actualiza docs y abre el PR. Los spikes van a `spikes/` y terminan en `record-decision`. |
-| `develop-batch` | `/develop-batch <#N …> \| fase <n> \| hito <Hx.y>` | Orquestador. Construye el grafo con las `Depende de:` del lote, avisa de dependencias externas sin terminar, de ciclos y de conflictos probables (misma área o archivos), y propone un plan en oleadas (paralelo dentro de cada oleada, serie entre oleadas). El usuario añade o saca stories y confirma. Ejecuta con agentes `story-developer` en worktrees, revisa, hace push y abre un PR por story (estrategia `stack` o `merge-gates`). |
+| `develop-batch` | `/develop-batch <#N …> \| fase <n> \| hito <Hx.y>` | Orquestador. Construye el grafo con las `Depende de:` del lote, avisa de dependencias externas sin terminar, de ciclos y de conflictos probables (misma área o archivos), y propone un plan en oleadas (paralelo dentro de cada oleada, serie entre oleadas). El usuario añade o saca stories y confirma. Ejecuta con agentes `story-developer` en worktrees (ramas `story/…` locales apiladas por dependencia), revisa cada story, las integra en `batch/<slug>` y abre **un solo PR** para el lote. Excluye los issues `manual-only`. |
 | `record-decision` | `/record-decision [#spike \| texto]` | Lleva una decisión a arch.md (§2, sección afectada, sin marcas de spike, §18, *Registro de decisiones*) y roadmap.md sin dejar contradicciones; comenta y desbloquea los issues afectados. Pide confirmación antes de editar. |
 | `check-standards` | `/check-standards [diff\|all\|area:x\|ruta]` | Checks automáticos + `standards-reviewer` sobre el alcance (por defecto, el diff contra main). Ofrece corregir los ERROR. |
 
@@ -64,9 +65,10 @@ docs/code_standards.md         # fuente de verdad de develop-story y standards-r
 
 ## Convenciones clave
 
-- **Una story = un PR.** Tamaño máximo `L`; si no cabe, se divide.
+- **Una story = una rama.** `/develop-story` abre un PR por story; `/develop-batch`, un PR por lote. Tamaño máximo de una story `L`; si no cabe, se divide.
 - **Dependencias obligatorias:** toda story lleva `Depende de: #N` (solo las directas) o `Depende de: ninguna`. Sin esto, `develop-batch` no puede armar el grafo.
-- **Lotes:** `batch` en el config (`maxParallel`, `strategy`, `maxFixRounds`). Con `stack`, las ramas dependientes parten de la rama de su dependencia y los PRs se mergean de abajo hacia arriba; con `merge-gates`, cada oleada espera a que la anterior esté mergeada.
+- **Lotes:** `batch` en el config (`maxParallel`, `strategy`, `maxFixRounds`, `branchPattern`). Las ramas `story/…` dependientes parten de la rama de su dependencia (`stack`) y no se publican; al final se integran en `batch/<slug>`, que se publica con un único PR con un `Closes #N` por story.
+- **`manual-only`** (label de `labels.execution`): trabajo que solo puede hacer una persona (servidores reales, credenciales, hardware, root, GUI). Ningún agente lo toma.
 - **Spikes** (`type:spike`): código descartable en `spikes/h0.<n>-<slug>/` + `RESULTS.md`; la decisión entra a arch.md con `record-decision`.
 - **El issue se cierra con el merge** (`Closes #N`). Estados: `status:in-progress` → `status:in-review`.
 - **Board:** `project.board` es `null`. Para usar un GitHub Project, crearlo y poner su número en el config.
