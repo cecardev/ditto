@@ -1,0 +1,95 @@
+{
+  "project": {
+    "name": "ditto",
+    "repo": "cecardev/ditto",
+    "defaultBranch": "main",
+    "board": null,
+    "boardOwner": "cecardev"
+  },
+  "docs": {
+    "architecture": "arch.md",
+    "roadmap": "roadmap.md",
+    "proposal": "project.md",
+    "codeStandards": "docs/code_standards.md"
+  },
+  "paths": {
+    "spikes": "spikes/",
+    "storyTemplates": ".claude/skills/create-story/templates/"
+  },
+  "branchPattern": "story/{number}-{slug}",
+  "milestones": {
+    "0": "Fase 0 — Spikes",
+    "1": "Fase 1 — MVP",
+    "2": "Fase 2 — Robustez",
+    "3": "Fase 3 — Ecosistema"
+  },
+  "labels": {
+    "type": {
+      "type:spike": { "color": "fbca04", "description": "Validación descartable; produce decisiones en arch.md" },
+      "type:feature": { "color": "0e8a16", "description": "Funcionalidad del producto" },
+      "type:chore": { "color": "c5def5", "description": "CI, build, release, tooling" },
+      "type:docs": { "color": "0075ca", "description": "Solo documentación" },
+      "type:bug": { "color": "d73a4a", "description": "Algo no funciona" }
+    },
+    "area": {
+      "area:platform": { "color": "5319e7", "description": "internal/platform" },
+      "area:manifest": { "color": "5319e7", "description": "internal/manifest + components.toml" },
+      "area:setup": { "color": "5319e7", "description": "internal/setup (menú + perfil)" },
+      "area:resolve": { "color": "5319e7", "description": "internal/resolve" },
+      "area:installer": { "color": "5319e7", "description": "internal/installer (mise)" },
+      "area:config": { "color": "5319e7", "description": "internal/config (dotfiles, LazyVim, OpenCode)" },
+      "area:env": { "color": "5319e7", "description": "internal/env (wrappers, aislamiento)" },
+      "area:launcher": { "color": "5319e7", "description": "internal/launcher (subshell, ditto env)" },
+      "area:cli": { "color": "5319e7", "description": "cmd/ditto y subcomandos" },
+      "area:release": { "color": "5319e7", "description": "GoReleaser, install.sh, workflows" },
+      "area:docs": { "color": "5319e7", "description": "arch.md, roadmap.md, standards" }
+    },
+    "priority": {
+      "priority:alta": { "color": "b60205", "description": "Bloquea otras stories o es camino crítico" },
+      "priority:media": { "color": "d93f0b", "description": "Importante, no bloqueante" },
+      "priority:baja": { "color": "fef2c0", "description": "Nice to have" }
+    },
+    "size": {
+      "size:XS": { "color": "ededed", "description": "1-2 h" },
+      "size:S": { "color": "ededed", "description": "medio día" },
+      "size:M": { "color": "ededed", "description": "1 día" },
+      "size:L": { "color": "ededed", "description": "2-3 días (considerar dividir)" }
+    },
+    "status": {
+      "status:in-progress": { "color": "1d76db", "description": "En desarrollo" },
+      "status:in-review": { "color": "0052cc", "description": "PR abierto" },
+      "status:blocked": { "color": "000000", "description": "Bloqueada por dependencia o decisión" }
+    }
+  },
+  "platforms": {
+    "runtime": "docker",
+    "images": {
+      "ubuntu-18.04": { "image": "ubuntu:18.04", "libc": "glibc 2.27", "arch": ["amd64", "arm64"] },
+      "ubuntu-20.04": { "image": "ubuntu:20.04", "libc": "glibc 2.31", "arch": ["amd64", "arm64"] },
+      "ubuntu-22.04": { "image": "ubuntu:22.04", "libc": "glibc 2.35", "arch": ["amd64", "arm64"] },
+      "rocky-8": { "image": "rockylinux:8", "libc": "glibc 2.28", "arch": ["amd64", "arm64"] },
+      "debian-12": { "image": "debian:12", "libc": "glibc 2.36", "arch": ["amd64", "arm64"] },
+      "alpine-3.20": { "image": "alpine:3.20", "libc": "musl", "arch": ["amd64", "arm64"] }
+    },
+    "defaultMatrix": ["ubuntu-18.04", "ubuntu-22.04", "alpine-3.20"],
+    "note": "Ajustar la matriz con el inventario real de servidores (roadmap Fase 0)."
+  },
+  "verify": {
+    "requiresGoMod": true,
+    "commands": [
+      "test -z \"$(gofmt -l .)\"",
+      "go vet ./...",
+      "go test -race ./..."
+    ],
+    "crossBuild": [
+      "linux/amd64",
+      "linux/arm64",
+      "darwin/amd64",
+      "darwin/arm64"
+    ],
+    "optional": [
+      "golangci-lint run",
+      "shellcheck install.sh"
+    ]
+  }
+}

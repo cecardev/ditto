@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth status)",
+      "Bash(gh issue list *)",
+      "Bash(gh issue view *)",
+      "Bash(gh label list *)",
+      "Bash(gh pr list *)",
+      "Bash(gh pr view *)",
+      "Bash(gh api repos/cecardev/ditto/milestones)",
+      "Bash(gofmt -l *)",
+      "Bash(go vet *)",
+      "Bash(go test *)",
+      "Bash(go build *)"
+    ],
+    "deny": [
+      "mcp__github"
+    ]
+  }
+}
