@@ -10,7 +10,7 @@ CLI en Go que, ejecutada en un servidor Linux o en macOS, prepara un entorno de 
 | [roadmap.md](roadmap.md) | Fases, hitos (`H<fase>.<n>`), criterios y orden | Qué se hace y cuándo |
 | [docs/code_standards.md](docs/code_standards.md) | Cómo se escribe el código | Obligatorio al programar |
 | [project.md](project.md) | Propuesta original | Histórico; no se edita |
-| GitHub Issues | Stories: el trabajo concreto | Una story = un PR |
+| GitHub Issues | Stories: el trabajo concreto | Una story = una rama; un PR por story o por lote |
 
 Lo marcado como *(spike H…)*, "provisional" o "pendiente" en arch.md **no está decidido**: no implementarlo como si lo estuviera. Para cerrar una decisión se usa `/record-decision`.
 
@@ -36,7 +36,8 @@ Si el usuario pide implementar algo que no tiene issue, proponer primero crear l
 
 - **GitHub solo con la CLI `gh`.** El MCP de GitHub está denegado.
 - **No usar ruflo** (ni sus herramientas MCP `memory_*`, `swarm_*`, `agent_spawn`, `hooks_route`). La orquestación de agentes es la de este harness (`develop-batch` + agentes de `.claude/agents/`).
-- **Una story = una rama `story/<N>-<slug>` = un PR con `Closes #N`.** El issue se cierra al mergear, no a mano.
+- **Una story = una rama `story/<N>-<slug>`.** `/develop-story` abre un PR por story con `Closes #N`; `/develop-batch` integra todas las stories del lote en una rama `batch/<slug>` y abre **un solo PR** con un `Closes #N` por story. El issue se cierra al mergear, no a mano.
+- **`manual-only`**: issues que solo puede hacer una persona (servidores reales, credenciales, hardware, root, GUI). Ningún agente los desarrolla; `/develop-batch` los excluye.
 - **Toda story declara dependencias** (`Depende de: #N` o `Depende de: ninguna`).
 - **Spikes** (`type:spike`): código descartable en `spikes/h0.<n>-<slug>/` + `RESULTS.md`. Nunca en `internal/` ni `cmd/`.
 - Pedir confirmación antes de `git push`, abrir PRs, mergear o editar decisiones en arch.md (salvo que un plan de `develop-batch` confirmado ya lo autorice).

@@ -34,6 +34,7 @@ Crea una story como GitHub Issue en el repo de ditto siguiendo las convenciones 
 | `priority:*` | alta, media, baja | `alta` = camino crítico o desbloquea otras |
 | `size:*` | XS, S, M, L | > L → dividir |
 | `status:*` | blocked (opcional al crear) | Si depende de una decisión pendiente |
+| `manual-only` | (opcional) | Solo puede hacerlo una persona: servidores reales, credenciales, hardware no disponible, root o GUI. Ningún agente lo desarrolla y `develop-batch` lo excluye. El body lista cada verificación con su comando exacto y dónde anotar el resultado |
 
 ### Milestone
 

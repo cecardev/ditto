@@ -41,6 +41,24 @@ Desarrollas **una** story dentro de un worktree aislado. Te lanza el orquestador
 4. Commits en tu rama con Conventional Commits en español y `(#<issue>)`, más la línea de atribución que indique el harness.
 5. Si en cualquier punto falta información crítica, el alcance es ambiguo, o arreglar algo exige salir del alcance: **detenerse** y devolver `needs-input` o `failed`. No inventar diseño.
 
+## Entorno de pruebas y limpieza
+
+Las pruebas (sobre todo los spikes) no deben dejar rastro en la máquina del usuario:
+
+- **Nunca con el `$HOME` real**: desde el primer comando, `HOME`/`TMPDIR`/`XDG_*` desechables (Docker, o un HOME temporal bajo tu directorio de trabajo), incluso para un `--version`. El `$HOME` real solo se lee (`find -newer`), nunca se usa para ejecutar.
+- **Rutas cortas** para workspaces de prueba (< 60 caracteres, p. ej. `/tmp/h05`): con rutas largas Neovim falla con `ENAMETOOLONG`.
+- **`mktemp` siempre con plantilla** bajo tu directorio de trabajo: en macOS, `mktemp -d` sin plantilla ignora `TMPDIR` y escribe en `DARWIN_USER_TEMP_DIR`.
+- **Nada contra servicios externos por defecto** (peticiones a modelos, telemetría, APIs de terceros más allá de descargar artefactos verificados): si hace falta, opt-in con una variable y documentado.
+- **Disco de Docker**: pocas imágenes y volúmenes; revisa el espacio libre antes de las pruebas pesadas.
+
+**Limpieza autorizada por el usuario.** Puedes borrar, sin preguntar, lo que se haya generado **por esta story o para probarla**:
+
+- directorios de trabajo, workspaces y temporales de tus pruebas (también fuera del worktree, p. ej. `/tmp/h05`, `DARWIN_USER_TEMP_DIR`, `/tmp/nvim.<user>`, `/tmp/lazygit-<uid>`);
+- imágenes, contenedores y volúmenes de Docker que hayas creado, y tus directorios de trabajo dentro de la VM de Docker;
+- restos que tus pruebas dejaron por error en el `$HOME` real (p. ej. `~/.local/state/mise` tras un `mise` sin aislar).
+
+Condiciones: solo si tienes evidencia de que lo creaste tú (no existía antes de tu ejecución, mtime de tu ejecución, nombre o marcador propio de la story). Nunca borres configuración ni datos del usuario, ni restos de otros agentes u otras stories, ni la caché compartida de Docker o imágenes base (`ubuntu:22.04`…). Si dudas de quién lo creó, no lo borres: repórtalo en `pending_manual`. Lista en el resultado (`cleanup`) todo lo que borraste.
+
 ## Si te reenvían mensajes
 
 El orquestador puede continuar tu sesión con hallazgos del `standards-reviewer`, resultados de `platform-tester` o respuestas del usuario. Aplicar los cambios, volver a verificar, commitear y devolver un nuevo resultado.
@@ -64,6 +82,8 @@ pending_manual:
   - <verificación pendiente con comando>
 decisions:
   - <decisión de arquitectura propuesta, con su sección de arch.md>
+cleanup:
+  - <ruta, imagen o contenedor borrado al terminar, y por qué era de esta story>
 question: <solo si needs-input: la pregunta concreta y las opciones>
 error: <solo si failed: qué falló y la salida relevante>
 out_of_scope:

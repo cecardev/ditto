@@ -1,6 +1,6 @@
 ---
 name: develop-batch
-description: Orquesta el desarrollo de un lote de stories de ditto — construye el grafo de dependencias, avisa de dependencias externas sin terminar, propone un plan en oleadas paralelo/serie para que el usuario lo ajuste y confirme, y lo ejecuta lanzando agentes story-developer en worktrees aislados, con revisión, PR por story y reporte final. Usar cuando el usuario quiere desarrollar varias stories a la vez (ej. "develop-batch 12 13 15", "desarrolla la fase 0", "todo el hito H1.6").
+description: Orquesta el desarrollo de un lote de stories de ditto — construye el grafo de dependencias, avisa de dependencias externas sin terminar, propone un plan en oleadas paralelo/serie para que el usuario lo ajuste y confirme, y lo ejecuta lanzando agentes story-developer en worktrees aislados, con revisión por story, un único PR para todo el lote y reporte final. Usar cuando el usuario quiere desarrollar varias stories a la vez (ej. "develop-batch 12 13 15", "desarrolla la fase 0", "todo el hito H1.6").
 argument-hint: "<#N #M …> | fase <n> | hito <Hx.y>"
 ---
 
@@ -8,11 +8,13 @@ argument-hint: "<#N #M …> | fase <n> | hito <Hx.y>"
 
 Desarrolla un lote de stories en paralelo donde el grafo lo permite y en serie donde no. Toda interacción con GitHub con **`gh`**.
 
-Este skill corre en la conversación principal: es el orquestador. Lanza agentes `story-developer` (uno por story, cada uno en su worktree), y él mismo ejecuta `standards-reviewer`, `platform-tester`, el push y los PRs.
+Este skill corre en la conversación principal: es el orquestador. Lanza agentes `story-developer` (uno por story, cada uno en su worktree), y él mismo ejecuta `standards-reviewer`, `platform-tester`, la integración, el push y el PR.
+
+**Un lote = una rama `batch/<slug>` = un PR.** Cada story se desarrolla y se revisa en su propia rama `story/<N>-<slug>` (local, no se publica), y al final todas se integran en la rama del lote, que se publica con un único PR con un `Closes #N` por story.
 
 ## Paso 0 — Configuración y precondiciones
 
-1. Leer `.claude/project.config.json`: `project.*`, `branchPattern`, `labels.status`, `batch`, `platforms`.
+1. Leer `.claude/project.config.json`: `project.*`, `branchPattern`, `labels.status`, `labels.execution`, `batch`, `platforms`.
 2. `gh auth status`; `git status --porcelain` limpio (si no, detener y preguntar); `git switch <defaultBranch> && git pull --ff-only`.
 
 ## Paso 1 — Armar el lote
@@ -28,7 +30,9 @@ gh issue list --repo <repo> --state all --limit 300 --json number,title,state,la
 gh pr list --repo <repo> --state open --json number,headRefName,body
 ```
 
-Descartar del lote (y avisar) los cerrados y los que ya tengan `status:in-progress` o `status:in-review`.
+Descartar del lote (y avisar) los cerrados, los que ya tengan `status:in-progress` o `status:in-review`, y los `manual-only` (los hace una persona, no un agente).
+
+El nombre de la rama del lote sale de `batch.branchPattern` con un slug del argumento: `fase <n>` → `fase-<n>`, `hito <Hx.y>` → `hito-hx.y`, números → `stories-<N>-<M>-…` (o un slug corto del tema si son muchos). Si la rama ya existe en local o en el remoto, añadir un sufijo (`-2`).
 
 ## Paso 2 — Grafo de dependencias
 
@@ -52,15 +56,12 @@ Por cada story, extraer las líneas `Depende de: #M` (y el título, tipo, área,
 
 Calcular oleadas por orden topológico (oleada 1 = sin dependencias pendientes; oleada k = todas sus dependencias en oleadas < k). Dentro de cada oleada, como máximo `batch.maxParallel` agentes simultáneos.
 
-Base de cada rama, según `batch.strategy`:
-
-- **`stack`** (default): una dependencia interna → parte de la rama de esa story; varias → parte de la primera y fusiona las demás (`merge`); ninguna → `defaultBranch`. El PR apunta a la rama base, de modo que cada PR muestra solo su diff.
-- **`merge-gates`**: todas parten de `defaultBranch`; una oleada empieza solo cuando los PRs de la anterior están mergeados (el usuario los mergea; el orquestador espera su aviso).
+Base de cada rama de story (`batch.strategy: stack`): una dependencia interna → parte de la rama de esa story; varias → parte de la primera y fusiona las demás (`merge`); ninguna → `defaultBranch`. Así cada diff de revisión (`git diff <base>...<branch>`) muestra solo esa story.
 
 Mostrar:
 
 ```
-PLAN DEL LOTE — 6 stories · estrategia: stack · paralelo máx: 3
+PLAN DEL LOTE — 6 stories · rama del lote: batch/hito-h1.4 → main · paralelo máx: 3
 
 GRAFO
   #12 ──► #14 ──► #16
@@ -85,13 +86,13 @@ AVISOS
 
 ## Paso 4 — Ajuste y confirmación del usuario
 
-Preguntar qué hacer. El usuario puede: añadir stories (volver al Paso 1 con el lote ampliado), sacar stories, aceptar o rechazar aristas suaves, resolver cada aviso de dependencia externa, cambiar `strategy` o `maxParallel`. Recalcular y mostrar el plan tras cada cambio.
+Preguntar qué hacer. El usuario puede: añadir stories (volver al Paso 1 con el lote ampliado), sacar stories, aceptar o rechazar aristas suaves, resolver cada aviso de dependencia externa, cambiar `maxParallel` o el nombre de la rama del lote. Recalcular y mostrar el plan tras cada cambio.
 
-Pedir confirmación explícita del plan final. **La confirmación autoriza, para todas las stories del lote:** crear ramas y worktrees, commits, `git push` y abrir PRs. No autoriza mergear ni editar arch.md con decisiones (esas se proponen al final).
+Pedir confirmación explícita del plan final. **La confirmación autoriza, para todo el lote:** crear ramas y worktrees, commits, integrar las stories en la rama del lote, `git push` de esa rama y abrir **su** PR. No autoriza mergear ni editar arch.md con decisiones (esas se proponen al final).
 
 ## Paso 5 — Ejecución
 
-Mantener una cola de stories **listas**: todas sus dependencias internas terminaron en `done` (con `stack`) o están mergeadas (con `merge-gates`).
+Mantener una cola de stories **listas**: todas sus dependencias internas terminaron en `done`.
 
 Por cada story lista, hasta `batch.maxParallel` en curso:
 
@@ -100,40 +101,65 @@ Por cada story lista, hasta `batch.maxParallel` en curso:
 3. Al terminar, leer su `STORY_RESULT`:
    - **`done`** →
      1. lanzar **`standards-reviewer`** con `git diff <base>...<branch>` y los criterios del issue. Si hay `ERROR`, reenviarlos al mismo agente (SendMessage) para corregir; como máximo `batch.maxFixRounds` rondas, y si sigue fallando, marcar `failed`.
-     2. Si el issue pide verificación Linux o es un spike con pendientes Linux, lanzar **`platform-tester`**. Los fallos se reenvían al agente igual que el punto anterior; lo que no se pueda arreglar queda en el PR como pendiente.
-     3. `git push -u origin <branch>` y `gh pr create --base <base del plan> --head <branch>` con el body de develop-story (Fase 8). Con `stack`, añadir al body: `Stack: depende de #<PR de la base>; mergear después de él.`
-     4. `gh issue edit <N> --remove-label status:in-progress --add-label status:in-review`.
+     2. Si el issue pide verificación Linux o es un spike con pendientes Linux, lanzar **`platform-tester`**. Los fallos se reenvían al agente igual que el punto anterior; lo que no se pueda arreglar queda como pendiente en el PR del lote.
+     3. Si se reenviaron hallazgos solo de `WARNING` que afectan a código que reutilizarán sus dependientes, también conviene una ronda de corrección antes de marcarla `done`.
+     4. Guardar para el PR del lote el resumen de la story (cambios, criterios, verificación, review, pendientes, decisiones propuestas). **No** hacer push ni abrir PR por story.
      5. Marcar `done` y desbloquear a sus dependientes.
    - **`needs-input`** → mostrar la pregunta al usuario **en cuanto llegue** (las demás stories siguen). Reenviar la respuesta al agente con SendMessage.
    - **`failed`** → `gh issue edit <N> --remove-label status:in-progress`, comentar el error en el issue y marcar sus dependientes (transitivos) como `skipped`. Las stories independientes continúan.
-4. Informar al usuario de forma breve cada vez que una story cambia de estado (`#12 ✅ PR #31 · #14 desbloqueada`).
+4. Informar al usuario de forma breve cada vez que una story cambia de estado (`#12 ✅ revisada · #14 desbloqueada`).
 
-Con `merge-gates`, al terminar una oleada: listar sus PRs y esperar a que el usuario confirme que están mergeados (verificar con `gh pr view <n> --json state`) antes de lanzar la siguiente. Antes de cada oleada, `git pull --ff-only` en `defaultBranch`.
+## Paso 6 — Integración y PR del lote
 
-## Paso 6 — Cierre
+Cuando no quedan stories en curso:
 
-1. Limpiar los worktrees que ya hicieron push (`git worktree list` → `git worktree remove <ruta>`). No borrar ramas.
-2. Reporte final:
+1. Crear la rama del lote desde `defaultBranch` actualizado y fusionar, en orden topológico, las ramas de las stories `done` que no estén ya contenidas en otra fusionada (`git merge --no-ff --no-edit story/<N>-…`; con `stack`, fusionar las hojas basta). Las `failed` y `skipped` quedan fuera.
+   - Conflictos: si son triviales y mecánicos, resolverlos y anotarlo en el PR; si no, detener y preguntar al usuario.
+2. Verificar la rama integrada: la verificación de `CLAUDE.md` si hay `go.mod`, y que cada story conserva sus archivos (`git diff --stat <defaultBranch>...batch/<slug>`).
+3. `git push -u origin batch/<slug>` y un único `gh pr create --base <defaultBranch> --head batch/<slug> --title "<tipo>: <resumen del lote> (#N, #M, …)"` con el body:
+
+   ```markdown
+   Closes #12
+   Closes #14
+   Refs #15   <!-- story que deja trabajo abierto a propósito; el issue sigue abierto -->
+
+   ## Lote
+   | Story | Rama | Review | Plataformas | Pendiente manual |
+   |---|---|---|---|---|
+
+   ## #12 — <título>
+   <cambios · criterios de aceptación · verificación · review · pendientes · decisiones propuestas, como en develop-story Fase 8>
+
+   ## #14 — …
+
+   ## Orden de revisión sugerido
+   <por oleadas; los commits de cada story están en su rama story/N-…>
+   ```
+
+   Usar `Refs #N` en lugar de `Closes #N` cuando la story deja a propósito una parte manual que debe cerrar el issue (p. ej. un inventario que ejecuta el usuario).
+4. `gh issue edit <N> --remove-label status:in-progress --add-label status:in-review` en cada story incluida.
+5. Limpiar los worktrees (`git worktree list` → `git worktree remove <ruta>`) y los artefactos de prueba que las stories reportaron en `pending_manual` como suyos. No borrar ramas.
+
+## Paso 7 — Reporte final
 
 ```
-LOTE TERMINADO — 5/6 done · 1 skipped
+LOTE TERMINADO — 5/6 done · 1 skipped · PR #31 (batch/hito-h1.4 → main)
 
-| Story | Estado | PR (base) | Review | Plataformas | Pendiente manual |
-|---|---|---|---|---|---|
-| #12 | ✅ done | #31 (main) | 0 errores, 2 warnings | ✅ 3/3 | macOS: … |
-| #14 | ✅ done | #33 (story/12-…) | ✅ | — | — |
-| #16 | ⏭️ skipped | — | — | — | depende de #14… |
+| Story | Estado | Review | Plataformas | Pendiente manual |
+|---|---|---|---|---|
+| #12 | ✅ done | 0 errores, 2 warnings | ✅ 3/3 | macOS: … |
+| #14 | ✅ done | ✅ | — | — |
+| #16 | ⏭️ skipped | — | — | depende de #14… |
 
-ORDEN DE MERGE (stack): #31 → #32 → #33 → #35
-DECISIONES PROPUESTAS (spikes): #12 → ejecutar /record-decision 12
+DECISIONES PROPUESTAS (spikes): #12 → ejecutar /record-decision 12 tras el merge
 FUERA DE ALCANCE DETECTADO: <lista> → /create-story
+PENDIENTES SOLO MANUALES: <lista> → /create-story con label manual-only
 ```
-
-3. Orden de merge con `stack`: de abajo hacia arriba. Si se mergea con *squash*, después de cada merge hay que rebasar la siguiente rama sobre `defaultBranch` (`git rebase --onto <defaultBranch> <rama-base> <rama>` y `push --force-with-lease`). Ofrecer hacerlo cuando el usuario avise que mergeó.
 
 ## Reglas
 
 - Nunca empezar una story antes de que sus dependencias estén en `done`.
+- Un lote = un PR. No publicar las ramas `story/…` ni abrir PRs por story.
 - Nunca mergear PRs ni editar arch.md con decisiones de spikes: se proponen.
 - No reintentar en bucle: un `failed` se reporta, no se relanza sin preguntar.
-- Si `gh` deja de responder a mitad del lote: pausar el push y los PRs, dejar las ramas commiteadas y reportar qué falta.
+- Si `gh` deja de responder: dejar la rama del lote integrada y commiteada en local y reportar qué falta.
