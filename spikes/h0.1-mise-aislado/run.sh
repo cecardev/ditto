@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2031 # ditto_mise sets HOME/TMPDIR only in its own subshell, on purpose
 # Spike H0.1 — validates a pinned, fully isolated mise inside <dest>/.ditto/.
 #
 #   sh run.sh <dest> [all|online|offline]
@@ -16,7 +17,8 @@
 # Environment:
 #   DITTO_SPIKE_LOCK=<file>|none   lock to install from (default ./mise.lock)
 #   DITTO_SPIKE_HOST_MISE=1        create a fake host mise in $HOME first
-#                                  (only with a disposable HOME: docker/macos.sh)
+#                                  (refused unless DITTO_SPIKE_DISPOSABLE_HOME=1,
+#                                  as docker.sh/macos.sh set, or HOME is under <dest>)
 #   DITTO_MISE_FROM=<file>         local copy of the mise binary (still verified)
 #   DITTO_SPIKE_WATCH_EXCLUDE=<re> extended regex of paths to ignore in test 7
 #                                  (unrelated host noise, e.g. other processes)
@@ -81,7 +83,7 @@ net_reachable() {
 # Directories watched for writes outside .ditto (test 7).
 watch_dirs() {
 	echo "$HOME"
-	echo /tmp/
+	(cd /tmp && pwd -P) # real path (/private/tmp on macOS) so <dest> excludes match
 	[ -n "${TMPDIR:-}" ] && [ -d "$TMPDIR" ] && echo "$TMPDIR"
 	return 0
 }
@@ -92,17 +94,32 @@ snapshot_start() {
 	sleep 1
 }
 
-# Files newer than the marker outside <dest> and outside the fake host mise
-# (checked by hash in test 8).
+# exclude_paths — drops from stdin the watched roots themselves, everything
+# under <dest>/ and, only when the fake host mise was created, the paths of
+# that fixture (test 8 checks them by hash). Literal prefix comparison (awk
+# index), so paths with regex metacharacters are safe.
+exclude_paths() {
+	_fixture=0
+	[ "${DITTO_SPIKE_HOST_MISE:-0}" = 1 ] && _fixture=1
+	awk -v dest="$DEST/" -v realtmp="$(cd /tmp && pwd -P)" -v home="$HOME" -v tmpd="${TMPDIR:-/nonexistent}" -v fx="$_fixture" '
+		function under(p) { return index($0, p) == 1 }
+		$0 == home || $0 == realtmp || $0 == tmpd || $0 == dest || $0 "/" == dest { next }
+		under(dest) { next }
+		fx == 1 && ($0 == home "/.config" || $0 == home "/.local" || $0 == home "/.local/share" ||
+			$0 == home "/.local/bin" || under(home "/.config/mise") ||
+			under(home "/.local/share/mise") || $0 == home "/.local/bin/mise") { next }
+		{ print }
+	'
+}
+
+# Files newer than the marker outside <dest> (test 7).
 snapshot_diff() {
 	_out="$LOGS/outside-$1.txt"
 	: >"$_out"
 	for _d in $(watch_dirs); do
-		find "$_d" -newer "$MARKER" 2>/dev/null |
-			grep -v -e "^$DEST" -e "^$HOME/.config/mise" -e "^$HOME/.local/share/mise" \
-				-e "^$HOME/.local/bin/mise" -e "^$HOME/.local/bin\$" -e "^$HOME/.local/share\$" -e "^$HOME/.local\$" \
-				-e "^$HOME/.config\$" -e "^$HOME\$" -e '^/tmp/$' -e "^${TMPDIR:-/nonexistent}\$" |
-			grep -v -E "${DITTO_SPIKE_WATCH_EXCLUDE:-^\$}" >>"$_out" || true
+		find "$_d" -newer "$MARKER" 2>/dev/null | exclude_paths |
+			{ if [ -n "${DITTO_SPIKE_WATCH_EXCLUDE:-}" ]; then grep -v -E "$DITTO_SPIKE_WATCH_EXCLUDE"; else cat; fi; } \
+				>>"$_out" || true
 	done
 	if [ -s "$_out" ]; then
 		result "T7-outside-$1" FAIL "$(wc -l <"$_out" | tr -d ' ') path(s) written outside .ditto: $(head -n 5 "$_out" | tr '\n' ' ')"
@@ -121,6 +138,7 @@ tree_hash() { # <dir> — stable hash of a tree (names + contents)
 host_mise_setup() {
 	# A host mise with its own global config, data dir and a workspace
 	# mise.toml in <dest> (parent of .ditto). None of it may leak in.
+	# It writes into $HOME: require_disposable_home already ran at startup.
 	mkdir -p "$HOME/.config/mise" "$HOME/.local/share/mise/installs" "$HOME/.local/bin"
 	cp "$DITTO_MISE_BIN" "$HOME/.local/bin/mise"
 	cat >"$HOME/.config/mise/config.toml" <<-'EOF'
@@ -210,7 +228,7 @@ phase_online() {
 	result T0-host INFO "$(uname -sm) libc=$(ditto_libc) platform=$(host_platform) avx2=$(ditto_has_avx2 && echo yes || echo no)"
 	snapshot_start online
 
-	ditto_mise_env "$DEST/.ditto"
+	ditto_mise_paths "$DEST/.ditto"
 	if ditto_mise_bootstrap 2>"$LOGS/bootstrap.txt"; then
 		result T1-bootstrap PASS "$(ditto_mise_asset) sha256=$(ditto_mise_sha256 "$(ditto_mise_asset)")"
 	else
@@ -234,10 +252,10 @@ phase_online() {
 	fi
 
 	# Test 3: hand-made config + lock, install.
-	ditto_write_config "$MISE_GLOBAL_CONFIG_FILE"
-	cp "$MISE_GLOBAL_CONFIG_FILE" "$LOGS/config.toml"
+	ditto_write_config "$DITTO_MISE_CONFIG"
+	cp "$DITTO_MISE_CONFIG" "$LOGS/config.toml"
 	_cfgls=$(ditto_mise config ls 2>&1)
-	if [ "$(echo "$_cfgls" | grep -c .)" = 1 ] && echo "$_cfgls" | grep -q "$MISE_GLOBAL_CONFIG_FILE"; then
+	if [ "$(echo "$_cfgls" | grep -c .)" = 1 ] && echo "$_cfgls" | grep -q "$DITTO_MISE_CONFIG"; then
 		result T2-config PASS "only .ditto/mise/config.toml loaded"
 	else
 		result T2-config FAIL "$(echo "$_cfgls" | tr '\n' ' ')"
@@ -312,7 +330,7 @@ phase_offline() {
 	RESULTS="$LOGS/results-offline.txt"
 	: >"$RESULTS"
 	snapshot_start offline
-	ditto_mise_env "$DEST/.ditto"
+	ditto_mise_paths "$DEST/.ditto"
 	if [ "${DITTO_SPIKE_OFFLINE:-}" = proxy ]; then
 		# Any HTTP(S) attempt fails fast through a closed local port.
 		export HTTPS_PROXY=http://127.0.0.1:9 HTTP_PROXY=http://127.0.0.1:9 ALL_PROXY=http://127.0.0.1:9
@@ -364,6 +382,19 @@ phase_offline() {
 	smoke_all
 	snapshot_diff offline
 }
+
+# The host-mise fixture writes into $HOME: only with a disposable one.
+if [ "${DITTO_SPIKE_HOST_MISE:-0}" = 1 ]; then
+	case "$HOME/" in
+	"$DEST"/*) ;;
+	*)
+		if [ "${DITTO_SPIKE_DISPOSABLE_HOME:-0}" != 1 ]; then
+			echo "DITTO_SPIKE_HOST_MISE=1 writes into \$HOME ($HOME): set DITTO_SPIKE_DISPOSABLE_HOME=1 (docker.sh/macos.sh do) or use a HOME under <dest>" >&2
+			exit 2
+		fi
+		;;
+	esac
+fi
 
 case "$PHASE" in
 online) phase_online ;;

@@ -6,6 +6,13 @@
 #   sh docker.sh <ubuntu-18.04|ubuntu-22.04|alpine-3.20|debian-12|rocky-8> <amd64|arm64> <work-dir>
 #
 # amd64 on an arm64 host runs emulated (--platform linux/amd64).
+#
+# The containers run as root (HOME=/root is the disposable home of test 8;
+# --user would leave HOME unwritable). On a Linux docker host the files in
+# <work-dir> therefore end up owned by root: remove them with
+# `docker run --rm -v <work-dir>:/w alpine rm -rf /w/ws` or sudo. With
+# colima/Docker Desktop on macOS, paths outside the shared mounts (e.g.
+# /private/tmp under colima) live only inside the VM.
 set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd -P)
@@ -47,15 +54,21 @@ TAG="ditto-h01-$KEY-$ARCH"
 printf 'FROM %s\nRUN %s\n' "$IMAGE" "$PREREQ" |
 	docker build -q --platform "linux/$ARCH" -t "$TAG" - >/dev/null || exit 1
 
+# MISE_* as a host user with mise would have them exported: the isolation
+# must drop them (otherwise T2/T7 fail: data in /root/host-mise, env "host").
+HOST_MISE_ENV="-e MISE_DATA_DIR=/root/host-mise -e MISE_CACHE_DIR=/root/host-mise/cache -e MISE_ENV=host -e MISE_SHIMS_DIR=/root/host-mise/shims"
+
 echo "== $KEY linux/$ARCH ($IMAGE): online" >&2
-docker run --rm --platform "linux/$ARCH" -e DITTO_SPIKE_HOST_MISE=1 \
-	-v "$HERE:/spike:ro" -v "$WORK:/work" "$TAG" \
+# shellcheck disable=SC2086 # HOST_MISE_ENV is a list of flags
+docker run --rm --platform "linux/$ARCH" -e DITTO_SPIKE_HOST_MISE=1 -e DITTO_SPIKE_DISPOSABLE_HOME=1 \
+	$HOST_MISE_ENV -v "$HERE:/spike:ro" -v "$WORK:/work" "$TAG" \
 	sh /spike/run.sh /work/ws online
 rc1=$?
 
 echo "== $KEY linux/$ARCH ($IMAGE): offline (--network none)" >&2
+# shellcheck disable=SC2086
 docker run --rm --platform "linux/$ARCH" --network none \
-	-v "$HERE:/spike:ro" -v "$WORK:/work" "$TAG" \
+	$HOST_MISE_ENV -v "$HERE:/spike:ro" -v "$WORK:/work" "$TAG" \
 	sh /spike/run.sh /work/ws offline
 rc2=$?
 

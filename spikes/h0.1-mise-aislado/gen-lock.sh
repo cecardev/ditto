@@ -15,10 +15,10 @@ HERE=$(cd "$(dirname "$0")" && pwd -P)
 OUT=${2:-$HERE/mise.lock}
 PLATFORMS="linux-x64,linux-arm64,linux-x64-musl,linux-arm64-musl,macos-x64,macos-arm64"
 
-ditto_mise_env "$1/.ditto"
+ditto_mise_paths "$1/.ditto"
 ditto_mise_bootstrap
-CFG="$MISE_GLOBAL_CONFIG_FILE"
-LOCK="$DITTO_DIR/mise/mise.lock"
+CFG="$DITTO_MISE_CONFIG"
+LOCK="$DITTO_MISE_LOCK"
 rm -f "$LOCK"
 
 # Pass 1: every tool, normal OpenCode build, all platforms.

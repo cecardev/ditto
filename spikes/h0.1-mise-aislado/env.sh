@@ -3,9 +3,14 @@
 # a .ditto/ directory. Source it (POSIX sh) and call the functions:
 #
 #   . spikes/h0.1-mise-aislado/env.sh
-#   ditto_mise_env /path/to/.ditto      # export the MISE_* isolation vars
+#   ditto_mise_paths /path/to/.ditto    # set DITTO_* paths (exports nothing)
 #   ditto_mise_bootstrap                # download + sha256-verify mise
 #   ditto_mise install                  # run the isolated mise
+#
+# ditto_mise applies the MISE_* isolation (and HOME/XDG_*/TMPDIR) inside its
+# own subshell, per invocation, so the caller's shell never carries MISE_*.
+# ditto_mise_env exports them into the current shell instead: use it only in
+# a script or subshell, never in the user's interactive shell (arch.md §8).
 #
 # Throwaway spike code: the production version lives in internal/installer.
 
@@ -80,16 +85,49 @@ ditto_mise_asset() {
 	fi
 }
 
-# ditto_mise_env <ditto_dir> — exports every variable needed so mise reads
-# and writes only under <ditto_dir>/mise. These must only ever be set for
-# the mise process (never exported to the user's subshell).
-ditto_mise_env() {
-	[ -n "${1:-}" ] || { echo "ditto_mise_env: missing <ditto_dir>" >&2; return 1; }
+# ditto_mise_paths <ditto_dir> — sets (and exports, they are not MISE_*)
+# DITTO_DIR, DITTO_MISE_BIN, DITTO_MISE_CONFIG and DITTO_MISE_LOCK. Records
+# the real HOME so the isolation can still ignore ~/.config/mise.
+ditto_mise_paths() {
+	[ -n "${1:-}" ] || { echo "ditto_mise_paths: missing <ditto_dir>" >&2; return 1; }
 	mkdir -p "$1/mise"
 	DITTO_DIR=$(cd "$1" && pwd -P)
+	DITTO_MISE_BIN="$DITTO_DIR/mise/bin/mise"
+	DITTO_MISE_CONFIG="$DITTO_DIR/mise/config.toml"
+	DITTO_MISE_LOCK="$DITTO_DIR/mise/mise.lock"
+	DITTO_REAL_HOME=${DITTO_REAL_HOME:-$HOME}
+	export DITTO_DIR DITTO_MISE_BIN DITTO_MISE_CONFIG DITTO_MISE_LOCK DITTO_REAL_HOME
+}
+
+# _ditto_mise_names — prints the names of the MISE_* variables in the
+# environment. A multi-line value can produce extra "MISE_x=" lines, but
+# every real variable starts a line, so none is missed; the regex only
+# yields valid shell names, so unsetting a spurious one is harmless.
+_ditto_mise_names() {
+	env | sed -n 's/^\(MISE_[A-Za-z0-9_]*\)=.*/\1/p' | sort -u
+}
+
+# ditto_mise_unexport — drops every MISE_* variable (what the subshell must
+# see), including names unknown to this script.
+ditto_mise_unexport() {
+	for _v in $(_ditto_mise_names); do
+		unset "$_v"
+	done
+}
+
+# _ditto_mise_isolate — removes every MISE_* inherited from the host (a host
+# MISE_DATA_DIR, MISE_ENV, MISE_SHIMS_DIR… would break the isolation), keeps
+# only the GitHub token (rate limit of `mise lock`; GITHUB_TOKEN is not
+# touched) and diagnostics that do not write anywhere, then exports the
+# isolation variables. Requires ditto_mise_paths.
+_ditto_mise_isolate() {
+	for _v in $(_ditto_mise_names); do
+		case "$_v" in
+		MISE_GITHUB_TOKEN | MISE_LOG_HTTP | MISE_DEBUG | MISE_TRACE | MISE_VERBOSE | MISE_LOG_LEVEL | MISE_OFFLINE) ;;
+		*) unset "$_v" ;;
+		esac
+	done
 	_m="$DITTO_DIR/mise"
-	export DITTO_DIR
-	export DITTO_MISE_BIN="$_m/bin/mise"
 	# Directories.
 	export MISE_DATA_DIR="$_m"
 	export MISE_CACHE_DIR="$_m/cache"
@@ -105,7 +143,7 @@ ditto_mise_env() {
 	export MISE_GLOBAL_CONFIG_ROOT="$_m"
 	export MISE_SYSTEM_CONFIG_FILE="$_m/system/config.toml"
 	export MISE_CEILING_PATHS="$DITTO_DIR"
-	export MISE_IGNORED_CONFIG_PATHS="$HOME/.config/mise"
+	export MISE_IGNORED_CONFIG_PATHS="$DITTO_REAL_HOME/.config/mise"
 	# Trust: only our own config, by path, so `mise trust` never writes state
 	# elsewhere and no prompt appears.
 	export MISE_TRUSTED_CONFIG_PATHS="$_m"
@@ -119,23 +157,29 @@ ditto_mise_env() {
 	export MISE_EXPERIMENTAL=1
 	# Lockfile lives next to the global config: .ditto/mise/mise.lock.
 	export MISE_LOCKFILE=1
-	unset MISE_SHIMS_DIR MISE_INSTALLS_DIR MISE_ENV 2>/dev/null || true
 }
 
-# ditto_mise_unexport — drops every MISE_* variable (what the subshell must
-# see). Uses `env` so it also works for names unknown to this script.
-ditto_mise_unexport() {
-	for _v in $(env | sed -n 's/^\(MISE_[A-Za-z0-9_]*\)=.*/\1/p'); do
-		unset "$_v"
-	done
+# ditto_mise_env <ditto_dir> — ditto_mise_paths + exports the isolation into
+# the CURRENT shell. Only for scripts/subshells that must hand MISE_* to
+# something other than ditto_mise; never in the user's interactive shell.
+ditto_mise_env() {
+	ditto_mise_paths "$1" || return 1
+	_ditto_mise_isolate
 }
 
-# _ditto_fetch <url> <dest> — HTTPS download with curl or wget.
+# _ditto_fetch <url> <dest> — HTTPS-only download with curl or wget.
 _ditto_fetch() {
+	case "$1" in https://*) ;; *) echo "refusing non-HTTPS URL: $1" >&2; return 1 ;; esac
 	if command -v curl >/dev/null 2>&1; then
 		curl -fsSL --proto '=https' --tlsv1.2 -o "$2" "$1"
 	elif command -v wget >/dev/null 2>&1; then
-		wget -q -O "$2" "$1"
+		# GNU wget can refuse redirects to http://; busybox wget has no such
+		# flag, so the URL check above is the only guard there.
+		if wget --help 2>&1 | grep -q -- '--https-only'; then
+			wget -q --https-only -O "$2" "$1"
+		else
+			wget -q -O "$2" "$1"
+		fi
 	else
 		echo "need curl or wget" >&2
 		return 1
@@ -153,9 +197,9 @@ ditto_sha256() {
 
 # ditto_mise_bootstrap — downloads the pinned mise into $DITTO_MISE_BIN and
 # verifies it against the embedded sha256. Idempotent. Requires
-# ditto_mise_env first. Set DITTO_MISE_FROM=<file> to use a local copy.
+# ditto_mise_paths first. Set DITTO_MISE_FROM=<file> to use a local copy.
 ditto_mise_bootstrap() {
-	[ -n "${DITTO_MISE_BIN:-}" ] || { echo "call ditto_mise_env first" >&2; return 1; }
+	[ -n "${DITTO_MISE_BIN:-}" ] || { echo "call ditto_mise_paths first" >&2; return 1; }
 	_asset=$(ditto_mise_asset) || return 1
 	_want=$(ditto_mise_sha256 "$_asset") || { echo "no embedded sha256 for $_asset" >&2; return 1; }
 	if [ -x "$DITTO_MISE_BIN" ] && [ "$(ditto_sha256 "$DITTO_MISE_BIN")" = "$_want" ]; then
@@ -189,16 +233,19 @@ ditto_mise_bootstrap() {
 # So, for the mise process only, HOME and XDG_* point inside .ditto/mise/home.
 # DITTO_MISE_ISOLATE_HOME=0 disables this (used to demonstrate the leak).
 ditto_mise() {
-	if [ "${DITTO_MISE_ISOLATE_HOME:-1}" = 1 ]; then
-		_h="$DITTO_DIR/mise/home"
-		mkdir -p "$_h" "$DITTO_DIR/mise/tmp"
-		(cd "$DITTO_DIR/mise" && HOME="$_h" XDG_CACHE_HOME="$_h/.cache" \
-			XDG_CONFIG_HOME="$_h/.config" XDG_DATA_HOME="$_h/.local/share" \
-			XDG_STATE_HOME="$_h/.local/state" TMPDIR="$DITTO_DIR/mise/tmp" \
-			"$DITTO_MISE_BIN" "$@")
-	else
-		(cd "$DITTO_DIR/mise" && "$DITTO_MISE_BIN" "$@")
-	fi
+	[ -n "${DITTO_DIR:-}" ] || { echo "call ditto_mise_paths first" >&2; return 1; }
+	mkdir -p "$DITTO_DIR/mise/home" "$DITTO_DIR/mise/tmp"
+	(
+		_ditto_mise_isolate
+		cd "$DITTO_DIR/mise" || exit 1
+		if [ "${DITTO_MISE_ISOLATE_HOME:-1}" = 1 ]; then
+			_h="$DITTO_DIR/mise/home"
+			export HOME="$_h" XDG_CACHE_HOME="$_h/.cache" \
+				XDG_CONFIG_HOME="$_h/.config" XDG_DATA_HOME="$_h/.local/share" \
+				XDG_STATE_HOME="$_h/.local/state" TMPDIR="$DITTO_DIR/mise/tmp"
+		fi
+		exec "$DITTO_MISE_BIN" "$@"
+	)
 }
 
 # ---------------------------------------------------------------------------

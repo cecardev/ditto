@@ -16,24 +16,31 @@
 
 | Archivo | Para qué |
 |---|---|
-| `env.sh` | Librería POSIX reutilizable: versión y sha256 de mise, `ditto_mise_env <dir>` (exporta las `MISE_*`), `ditto_mise_bootstrap`, `ditto_mise <args>`, `ditto_mise_unexport`, detección de plataforma/libc/AVX2 y `ditto_write_config` (genera `config.toml` por host). **Pensada para H0.1b (#4) y #5.** |
+| `env.sh` | Librería POSIX reutilizable: versión y sha256 de mise, `ditto_mise_paths <dir>` (solo rutas `DITTO_*`), `ditto_mise <args>` (aplica el aislamiento por invocación en un subshell), `ditto_mise_env <dir>` (exporta las `MISE_*` en el shell actual), `ditto_mise_bootstrap`, `ditto_mise_unexport`, detección de plataforma/libc/AVX2 y `ditto_write_config` (genera `config.toml` por host). **Pensada para H0.1b (#4) y #5.** |
 | `run.sh <dest> [all\|online\|offline]` | Pruebas 1–8 sobre `<dest>/.ditto`. Imprime líneas `RESULT <id> <PASS\|FAIL\|INFO\|SKIP> …`. |
 | `gen-lock.sh <scratch> [out]` | Regenera `mise.lock` (6 plataformas, variantes de OpenCode). |
 | `mise.lock` | Lockfile compartido generado con `gen-lock.sh`. |
 | `docker.sh <imagen> <arch> <workdir>` | Driver Linux: fase *online* y después fase *offline* con `--network none` sobre el mismo volumen. |
-| `macos.sh <scratch>` | Driver macOS: `HOME` y `TMPDIR` desechables, mise del host simulado y escaneo del `$HOME` real. |
+| `macos.sh <scratch>` | Driver macOS: `HOME` y `TMPDIR` desechables, mise del host simulado y barrido completo del `$HOME` real. |
 
-Uso desde otra story:
+### Reutilización en #4 (H0.1b) y #5
 
 ```sh
 . spikes/h0.1-mise-aislado/env.sh
-ditto_mise_env "$PWD/.ditto"        # exporta MISE_* (solo para mise)
+ditto_mise_paths "$PWD/.ditto"      # DITTO_DIR, DITTO_MISE_BIN/CONFIG/LOCK; no exporta MISE_*
 ditto_mise_bootstrap                # descarga + sha256
-ditto_write_config "$MISE_GLOBAL_CONFIG_FILE"
-cp spikes/h0.1-mise-aislado/mise.lock "$DITTO_DIR/mise/mise.lock"
-ditto_mise install --locked
+ditto_write_config "$DITTO_MISE_CONFIG"
+cp spikes/h0.1-mise-aislado/mise.lock "$DITTO_MISE_LOCK"
+ditto_mise install --locked         # MISE_* + HOME/XDG/TMPDIR solo en este proceso
 ditto_mise which nvim               # ruta absoluta para el wrapper
 ```
+
+Reglas:
+
+- **Las `MISE_*` se limitan al proceso de mise; nunca al shell del usuario** (arch.md §8). `ditto_mise` las aplica en cada invocación dentro de un subshell (`( … exec mise "$@" )`), así que el shell que la llama no queda con ninguna `MISE_*` ni con `HOME`/`XDG_*` cambiados. Es la forma recomendada.
+- `ditto_mise_env` exporta las `MISE_*` en el shell actual. Úsala solo dentro de un script o un subshell (`( ditto_mise_env …; otro-comando )`) cuando otra herramienta deba heredarlas, nunca en la sesión interactiva. Para limpiar un shell: `ditto_mise_unexport`.
+- Antes de exportar, el aislamiento hace **`unset` de toda `MISE_*` heredada del host** (`MISE_DATA_DIR`, `MISE_ENV`, `MISE_SHIMS_DIR`…). Solo conserva `MISE_GITHUB_TOKEN` (y `GITHUB_TOKEN`, que no es `MISE_*`) y los diagnósticos que no escriben nada (`MISE_LOG_HTTP`, `MISE_DEBUG`, `MISE_TRACE`, `MISE_VERBOSE`, `MISE_LOG_LEVEL`, `MISE_OFFLINE`). Los nombres salen de `env | sed -n 's/^\(MISE_[A-Za-z0-9_]*\)=.*/\1/p'`: un valor multilínea solo puede añadir nombres falsos (y válidos, así que el `unset` es inocuo), nunca ocultar uno real. `docker.sh` lo comprueba exportando `MISE_DATA_DIR`, `MISE_CACHE_DIR`, `MISE_ENV` y `MISE_SHIMS_DIR` del "host" en los contenedores.
+- Para la sesión de H0.1b (`mise en`/`exec`), parte de `ditto_mise`: el proceso hijo hereda las `MISE_*` de mise, y #4 debe comprobar cuáles llegan a la subshell.
 
 ## Versión de mise fijada
 
@@ -54,7 +61,7 @@ En Linux se usa siempre el build **`-musl`** (estático). Funciona en glibc 2.27
 
 ## Aislamiento: variables y mecanismo
 
-`ditto_mise_env` (env.sh) exporta, **solo para el proceso de mise**:
+`_ditto_mise_isolate` (env.sh; la usan `ditto_mise` y `ditto_mise_env`) exporta, **solo para el proceso de mise**, tras borrar las `MISE_*` heredadas:
 
 | Variable | Valor | Motivo |
 |---|---|---|
@@ -68,7 +75,7 @@ En Linux se usa siempre el build **`-musl`** (estático). Funciona en glibc 2.27
 | `MISE_SYSTEM_CONFIG_DIR`, `MISE_SYSTEM_DATA_DIR` | `.ditto/mise/system` | no leer `/etc/mise` ni `/usr/local/share/mise` |
 | `MISE_SYSTEM_CONFIG_FILE` | `.ditto/mise/system/config.toml` (no existe) | |
 | `MISE_CEILING_PATHS` | `.ditto` | no sube a buscar `mise.toml`/`.tool-versions`/`.miserc.toml` del workspace |
-| `MISE_IGNORED_CONFIG_PATHS` | `$HOME/.config/mise` | defensa adicional |
+| `MISE_IGNORED_CONFIG_PATHS` | `<HOME real>/.config/mise` | defensa adicional |
 | `MISE_TRUSTED_CONFIG_PATHS` | `.ditto/mise` | confianza por ruta: sin prompt ni escritura de estado fuera |
 | `MISE_YES=1`, `MISE_AUTO_INSTALL=0`, `MISE_NOT_FOUND_AUTO_INSTALL=0` | | no interactivo |
 | `MISE_DISABLE_UPDATE_WARNING=1`, `MISE_SELF_UPDATE_AUTO=0` | | sin comprobación de versión de mise |
@@ -77,6 +84,8 @@ En Linux se usa siempre el build **`-musl`** (estático). Funciona en glibc 2.27
 | `MISE_LOCKFILE=1` | | mantiene `mise.lock` existente |
 
 Además, `ditto_mise` ejecuta mise con `cwd=.ditto/mise` y, **solo en su entorno**, `HOME=.ditto/mise/home`, `XDG_{CACHE,CONFIG,DATA,STATE}_HOME` bajo ella y `TMPDIR=.ditto/mise/tmp`. Con `DITTO_MISE_ISOLATE_HOME=0` se desactiva para reproducir la fuga.
+
+Descargas propias (bootstrap de mise, prueba 5): solo URLs `https://`. Con curl se usa `--proto '=https' --tlsv1.2`; con GNU wget, `--https-only` (si `wget --help` lo anuncia). busybox wget (Alpine) no tiene esa opción, así que ahí solo protegen la comprobación de la URL y el sha256.
 
 El lockfile vive junto a la config global (`.ditto/mise/mise.lock`) y se genera con **`mise lock --global`**: un `mise lock` normal responde *"No tools configured to lock in this project"*.
 
@@ -129,8 +138,10 @@ Comandos:
 
 ```sh
 # macOS (HOME/TMPDIR desechables; nada en el $HOME real)
-sh spikes/h0.1-mise-aislado/macos.sh "$SCRATCH/mac"
-# Linux (online + offline --network none)
+DITTO_SPIKE_WATCH_EXCLUDE='<ruido ajeno en /tmp, si lo hay>' sh spikes/h0.1-mise-aislado/macos.sh "$SCRATCH/mac"
+# Linux (online + offline --network none). Los contenedores corren como root:
+# en un host Linux, <workdir> queda con archivos de root (borrar con
+# `docker run --rm -v <workdir>:/w alpine rm -rf /w/ws` o sudo).
 sh spikes/h0.1-mise-aislado/docker.sh ubuntu-18.04 amd64 "$SCRATCH/u18-amd64"
 sh spikes/h0.1-mise-aislado/docker.sh alpine-3.20 arm64 "$SCRATCH/alpine-arm64"
 # Lock (requiere red y la API de GitHub)
@@ -145,8 +156,9 @@ Detalle de cada prueba:
 - **T4:** en glibc < 2.31 la config generada usa `github:neovim/neovim-releases`. Además se instala el oficial para demostrar que falla.
 - **T5:** se descarga a mano el tarball de ripgrep de la URL del lock y se verifica contra su `checksum`. En la fase offline, `mise link -f github:BurntSushi/ripgrep@15.2.0-path <dir>` y `mise where` devuelven `installs/github-burnt-sushi-ripgrep/15.2.0-path` (enlace al directorio), y el `rg` enlazado arranca. Sin peticiones HTTP.
 - **T6:** `mise.lock` con checksums para `linux-x64`, `linux-arm64`, `linux-x64-musl`, `linux-arm64-musl`, `macos-x64` y `macos-arm64` (48 entradas de plataforma con `checksum`, más 12 paquetes conda de dependencias; la legacy de Neovim no tiene macOS). Cada ejecución es una reinstalación desde el lock en un `.ditto/` limpio, y `install --locked` no reescribe el lock. Con la red cortada (`--network none` en Linux; proxy muerto `127.0.0.1:9` en macOS) y `MISE_LOG_HTTP=1`, `install --locked` y `which` terminan bien con **0 peticiones**.
-- **T7:** `find $HOME /tmp/ $TMPDIR -newer <marker>` antes/después de cada fase, excluyendo `<dest>` y lo que crea el propio test del mise del host: vacío en todas las plataformas. En macOS, además, el `$HOME` real (`.config`, `.local`, `.cache`, `Library/{Caches,Application Support,Preferences}`) no tiene archivos nuevos relacionados con mise. *Control positivo:* con `DITTO_MISE_ISOLATE_HOME=0` y tree-sitter por `aqua:` (sin lock), T7 sí detecta `~/Library/Caches/dev.sigstore.sigstore-rust/…` (macOS) y `/root/.cache/sigstore-rust/tuf/…` (Ubuntu 22.04). Con aislamiento, esa caché queda en `.ditto/mise/home/.cache/sigstore-rust`. Con lock (checksum + provenance ya registrados) no se repite la verificación y no hay fuga ni sin aislar `HOME`.
-- **T8:** antes del marker se crean un `~/.local/bin/mise`, un `~/.config/mise/config.toml` (con `[tools]` fzf 0.50.0, `[env]` con marcador y `[settings]`) y un `<workspace>/mise.toml` (fd 9.0.0 y otro marcador). Con y sin aislamiento de `HOME`, el mise aislado no los lista en `config ls`, no exporta los marcadores en `mise env` y no muestra esas versiones en `ls`. El hash de `~/.config/mise` y `~/.local/share/mise` no cambia.
+- **T7:** `find $HOME <ruta real de /tmp> $TMPDIR -newer <marker>` antes/después de cada fase: vacío en todas las plataformas. Exclusiones: las propias raíces vigiladas, todo lo que está bajo `<dest>/` (comparación literal de prefijo) y, **solo si `DITTO_SPIKE_HOST_MISE=1`**, el fixture del mise del host (`~/.config/mise`, `~/.local/share/mise`, `~/.local/bin/mise` y sus padres), que T8 verifica por hash. El ruido ajeno se pasa por entorno (`DITTO_SPIKE_WATCH_EXCLUDE`, sin valor por defecto); en el Mac de desarrollo solo hizo falta excluir el directorio de tareas del agente que ejecutaba el spike (`/private/tmp/claude-501/…/tasks`).
+  **Alcance en macOS:** además, `macos.sh` barre **todo** el `$HOME` real (`find "$HOME" -newer <marker>`, saltando lo que no se puede leer por TCC). Cualquier ruta que contenga mise, sigstore, aqua, conda, nvim, neovim, opencode, lazygit, tree-sitter, ripgrep o fzf es FAIL; resultado: ninguna. El resto se lista para revisión manual en `<scratch>/real-home-new.txt`. En la última ejecución hubo 11 rutas, todas de procesos ajenos activos a la vez: `.vscode-server`, `.colima/_lima/…/diffdisk` (la VM de Docker), `.hermes/…` y una base de datos de `apps/open-notebook`. Exclusiones extra por entorno: `DITTO_SPIKE_REAL_HOME_EXCLUDE`. *Control positivo:* con `DITTO_MISE_ISOLATE_HOME=0` y tree-sitter por `aqua:` (sin lock), T7 sí detecta `~/Library/Caches/dev.sigstore.sigstore-rust/…` (macOS) y `/root/.cache/sigstore-rust/tuf/…` (Ubuntu 22.04). Con aislamiento, esa caché queda en `.ditto/mise/home/.cache/sigstore-rust`. Con lock (checksum + provenance ya registrados) no se repite la verificación y no hay fuga ni sin aislar `HOME`.
+- **T8:** antes del marker se crean un `~/.local/bin/mise`, un `~/.config/mise/config.toml` (con `[tools]` fzf 0.50.0, `[env]` con marcador y `[settings]`) y un `<workspace>/mise.toml` (fd 9.0.0 y otro marcador). Con y sin aislamiento de `HOME`, el mise aislado no los lista en `config ls`, no exporta los marcadores en `mise env` y no muestra esas versiones en `ls`. El hash de `~/.config/mise` y `~/.local/share/mise` no cambia. En Docker, además, los contenedores arrancan con `MISE_DATA_DIR`, `MISE_CACHE_DIR`, `MISE_ENV` y `MISE_SHIMS_DIR` del "host" exportados; T2 y T7 siguen en verde porque el aislamiento las borra.
 
 ### Hallazgos adicionales
 
@@ -160,7 +172,7 @@ Detalle de cada prueba:
 ## Pendientes (no cubiertos aquí)
 
 - [ ] **x86_64 real con AVX2**: el amd64 de Docker es emulado y no expone AVX2, así que solo se ejecutó el build `-baseline` de OpenCode. Comprobar el build normal en un servidor real:
-  `sh spikes/h0.1-mise-aislado/run.sh /tmp/ditto-h01 all` (con `DITTO_SPIKE_HOST_MISE=1` solo si `HOME` es desechable).
+  `sh spikes/h0.1-mise-aislado/run.sh /tmp/ditto-h01 all`. `DITTO_SPIKE_HOST_MISE=1` escribe un mise falso en `$HOME`: `run.sh` lo rechaza salvo con `DITTO_SPIKE_DISPOSABLE_HOME=1` o un `HOME` bajo `<dest>`.
 - [ ] **macOS x64 (Intel):** sin hardware. Mismo comando con `macos.sh`.
 - [ ] **Servidores reales** del usuario (glibc, CPU, red/proxy): `sh run.sh <dir> online` y después `sh run.sh <dir> offline` con la red cortada (o `DITTO_SPIKE_OFFLINE=proxy`).
 - [ ] **Limpieza en el `$HOME` del Mac de desarrollo**, de la primera prueba sin aislar (2026-10-21 21:13; no hay mise del host instalado): `rm -rf ~/.local/state/mise ~/Library/Caches/mise`.
@@ -181,7 +193,7 @@ Fallo parcial (anotado como riesgo, sin provider propio): **musl no tiene Neovim
 
 ### §2 Decisiones clave — fila "Obtención de binarios"
 
-> | Obtención de binarios | **mise `2026.10.15`** (fijado; sha256 por asset embebido en ditto; build `-musl` estático en Linux), totalmente aislado en `.ditto/mise/`: `MISE_DATA_DIR`, `MISE_CACHE_DIR`, `MISE_STATE_DIR`, `MISE_TMP_DIR`, `MISE_CONFIG_DIR`, `MISE_GLOBAL_CONFIG_FILE`, `MISE_GLOBAL_CONFIG_ROOT`, `MISE_SYSTEM_CONFIG_{DIR,FILE}`, `MISE_SYSTEM_DATA_DIR`, `MISE_CEILING_PATHS`, `MISE_TRUSTED_CONFIG_PATHS`, sin telemetría (`MISE_USE_VERSIONS_HOST_TRACK=0`) ni avisos de actualización; además `HOME`/`XDG_*`/`TMPDIR` → `.ditto/mise/home` **solo en el proceso de mise** (la caché TUF de sigstore ignora `MISE_CACHE_DIR`) y `cwd=.ditto/mise`. Lock con `mise lock --global` en `.ditto/mise/mise.lock`. Validado en H0.1 (macOS arm64; Ubuntu 18.04/22.04, Rocky 8, Debian 12, Alpine 3.20) |
+> | Obtención de binarios | **mise `2026.10.15`** (fijado; sha256 por asset embebido en ditto; build `-musl` estático en Linux), totalmente aislado en `.ditto/mise/`: se borran las `MISE_*` heredadas del host (salvo `MISE_GITHUB_TOKEN`) y se fijan `MISE_DATA_DIR`, `MISE_CACHE_DIR`, `MISE_STATE_DIR`, `MISE_TMP_DIR`, `MISE_CONFIG_DIR`, `MISE_GLOBAL_CONFIG_FILE`, `MISE_GLOBAL_CONFIG_ROOT`, `MISE_SYSTEM_CONFIG_{DIR,FILE}`, `MISE_SYSTEM_DATA_DIR`, `MISE_CEILING_PATHS`, `MISE_TRUSTED_CONFIG_PATHS`, sin telemetría (`MISE_USE_VERSIONS_HOST_TRACK=0`) ni avisos de actualización; además `HOME`/`XDG_*`/`TMPDIR` → `.ditto/mise/home` **solo en el proceso de mise** (la caché TUF de sigstore ignora `MISE_CACHE_DIR`) y `cwd=.ditto/mise`. Lock con `mise lock --global` en `.ditto/mise/mise.lock`. Validado en H0.1 (macOS arm64; Ubuntu 18.04/22.04, Rocky 8, Debian 12, Alpine 3.20) |
 
 ### §6 Backends (sustituye la tabla y quita *(spike H0.1)*)
 
