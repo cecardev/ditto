@@ -1,0 +1,169 @@
+# ditto host inventory (spike H0, issue #3)
+format = 1
+
+[host]
+label = "macos-1"
+date = "2026-10-22"
+in_container = "no"
+os = "Darwin"
+arch = "arm64"
+kernel = "25.2.0"
+distro_id = ""
+distro_version = ""
+distro_name = ""
+macos_version = "26.2"
+macos_clt = "installed"
+libc = "darwin"
+libc_version = ""
+libc_raw = ""
+cpu_model = "Apple M2 Pro"
+cpu_count = "10"
+avx2 = "n/a"
+
+[bin.git]
+category = "host-hard"
+found = true
+name = "git"
+path = "/usr/bin/git"
+version = "2.50.1"
+raw = "git version 2.50.1 (Apple Git-155)"
+
+[bin.curl]
+category = "host-hard"
+found = true
+name = "curl"
+path = "/usr/bin/curl"
+version = "8.7.1"
+raw = "curl 8.7.1 (x86_64-apple-darwin25.0) libcurl/8.7.1 (SecureTransport) LibreSSL/3.3.6 zlib/1.2.12 nghttp2/1.67.1"
+
+[bin.wget]
+category = "host-hard"
+found = false
+
+[bin.tar]
+category = "host-hard"
+found = true
+name = "tar"
+path = "/usr/bin/tar"
+version = "3.5.3"
+raw = "bsdtar 3.5.3 - libarchive 3.7.4 zlib/1.2.12 liblzma/5.4.3 bz2lib/1.0.8 "
+
+[bin.unzip]
+category = "host-hard"
+found = true
+name = "unzip"
+path = "/usr/bin/unzip"
+version = "6.00"
+raw = "UnZip 6.00 of 20 April 2009, by Info-ZIP, with modifications by Apple Inc."
+
+[bin.cc]
+category = "host-soft"
+found = true
+name = "cc"
+path = "/usr/bin/cc"
+version = "17.0.0"
+raw = "Apple clang version 17.0.0 (clang-1700.6.3.2)"
+
+[bin.ssh]
+category = "host-soft"
+found = true
+name = "ssh"
+path = "/usr/bin/ssh"
+version = "10.0"
+raw = "OpenSSH_10.0p2, LibreSSL 3.3.6"
+
+[bin.shell]
+category = "host-base"
+found = true
+name = "zsh"
+path = "/bin/zsh"
+version = "5.9"
+raw = "zsh 5.9 (arm64-apple-darwin25.0)"
+
+[bin.bash]
+category = "host-base"
+found = true
+name = "bash"
+path = "/bin/bash"
+version = "3.2.57"
+raw = "GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)"
+
+[bin.zsh]
+category = "host-base"
+found = true
+name = "zsh"
+path = "/bin/zsh"
+version = "5.9"
+raw = "zsh 5.9 (arm64-apple-darwin25.0)"
+
+[bin.gzip]
+category = "host-base"
+found = true
+name = "gzip"
+path = "/usr/bin/gzip"
+version = "475"
+raw = "Apple gzip 475"
+
+[bin.xz]
+category = "host-base"
+found = true
+name = "xz"
+path = "/opt/homebrew/bin/xz"
+version = "5.8.3"
+raw = "xz (XZ Utils) 5.8.3"
+
+[bin.nvim]
+category = "selectable"
+found = true
+name = "nvim"
+path = "/opt/homebrew/bin/nvim"
+version = "0.11.5"
+raw = "NVIM v0.11.5"
+
+[bin.rg]
+category = "selectable"
+found = true
+name = "rg"
+path = "/opt/homebrew/bin/rg"
+version = "15.1.0"
+raw = "ripgrep 15.1.0"
+
+[bin.fd]
+category = "selectable"
+found = false
+
+[bin.fzf]
+category = "selectable"
+found = false
+
+[bin.lazygit]
+category = "selectable"
+found = false
+
+[bin.node]
+category = "selectable"
+found = true
+name = "node"
+path = "/opt/homebrew/bin/node"
+version = "26.7.0"
+raw = "v26.7.0"
+
+[bin.python3]
+category = "selectable"
+found = true
+name = "python3"
+path = "/usr/bin/python3"
+version = "3.9.6"
+raw = "Python 3.9.6"
+
+[bin.go]
+category = "selectable"
+found = false
+
+[bin.mise]
+category = "managed"
+found = false
+
+[bin.conda]
+category = "passthrough"
+found = false

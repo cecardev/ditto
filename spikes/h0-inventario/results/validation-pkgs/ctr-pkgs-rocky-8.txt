@@ -1,0 +1,165 @@
+# ditto host inventory (spike H0, issue #3)
+format = 1
+
+[host]
+label = "ctr-pkgs-rocky-8"
+date = "2026-10-22"
+in_container = "yes"
+os = "Linux"
+arch = "aarch64"
+kernel = "6.8.0-64-generic"
+distro_id = "rocky"
+distro_version = "8.9"
+distro_name = "Rocky Linux 8.9 (Green Obsidian)"
+macos_version = ""
+macos_clt = ""
+libc = "glibc"
+libc_version = "2.28"
+libc_raw = "glibc 2.28"
+cpu_model = ""
+cpu_count = "4"
+avx2 = "n/a"
+
+[bin.git]
+category = "host-hard"
+found = true
+name = "git"
+path = "/usr/bin/git"
+version = "2.43.7"
+raw = "git version 2.43.7"
+
+[bin.curl]
+category = "host-hard"
+found = true
+name = "curl"
+path = "/usr/bin/curl"
+version = "7.61.1"
+raw = "curl 7.61.1 (aarch64-redhat-linux-gnu) libcurl/7.61.1 OpenSSL/1.1.1k zlib/1.2.11 nghttp2/1.33.0"
+
+[bin.wget]
+category = "host-hard"
+found = true
+name = "wget"
+path = "/usr/bin/wget"
+version = "1.19.5"
+raw = "GNU Wget 1.19.5 built on linux-gnu."
+
+[bin.tar]
+category = "host-hard"
+found = true
+name = "tar"
+path = "/usr/bin/tar"
+version = "1.30"
+raw = "tar (GNU tar) 1.30"
+
+[bin.unzip]
+category = "host-hard"
+found = true
+name = "unzip"
+path = "/usr/bin/unzip"
+version = "6.00"
+raw = "UnZip 6.00 of 20 April 2009, by Info-ZIP.  Maintained by C. Spieler.  Send"
+
+[bin.cc]
+category = "host-soft"
+found = true
+name = "cc"
+path = "/usr/bin/cc"
+version = "8.5.0"
+raw = "cc (GCC) 8.5.0 20210514 (Red Hat 8.5.0-29)"
+
+[bin.ssh]
+category = "host-soft"
+found = true
+name = "ssh"
+path = "/usr/bin/ssh"
+version = "8.0"
+raw = "OpenSSH_8.0p1, OpenSSL 1.1.1k  FIPS 25 Mar 2021"
+
+[bin.shell]
+category = "host-base"
+found = true
+name = "bash"
+path = "/bin/bash"
+version = "4.4.20"
+raw = "GNU bash, version 4.4.20(1)-release (aarch64-redhat-linux-gnu)"
+
+[bin.bash]
+category = "host-base"
+found = true
+name = "bash"
+path = "/usr/bin/bash"
+version = "4.4.20"
+raw = "GNU bash, version 4.4.20(1)-release (aarch64-redhat-linux-gnu)"
+
+[bin.zsh]
+category = "host-base"
+found = true
+name = "zsh"
+path = "/usr/bin/zsh"
+version = "5.5.1"
+raw = "zsh 5.5.1 (aarch64-redhat-linux-gnu)"
+
+[bin.gzip]
+category = "host-base"
+found = true
+name = "gzip"
+path = "/usr/bin/gzip"
+version = "1.9"
+raw = "gzip 1.9"
+
+[bin.xz]
+category = "host-base"
+found = true
+name = "xz"
+path = "/usr/bin/xz"
+version = "5.2.4"
+raw = "xz (XZ Utils) 5.2.4"
+
+[bin.nvim]
+category = "selectable"
+found = false
+
+[bin.rg]
+category = "selectable"
+found = false
+
+[bin.fd]
+category = "selectable"
+found = false
+
+[bin.fzf]
+category = "selectable"
+found = false
+
+[bin.lazygit]
+category = "selectable"
+found = false
+
+[bin.node]
+category = "selectable"
+found = true
+name = "node"
+path = "/usr/bin/node"
+version = "10.24.0"
+raw = "v10.24.0"
+
+[bin.python3]
+category = "selectable"
+found = true
+name = "python3"
+path = "/usr/bin/python3"
+version = "3.6.8"
+raw = "Python 3.6.8"
+
+[bin.go]
+category = "selectable"
+found = false
+
+[bin.mise]
+category = "managed"
+found = false
+
+[bin.conda]
+category = "passthrough"
+found = false

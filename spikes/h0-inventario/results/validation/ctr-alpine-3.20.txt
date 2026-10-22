@@ -1,0 +1,125 @@
+# ditto host inventory (spike H0, issue #3)
+format = 1
+
+[host]
+label = "ctr-alpine-3.20"
+date = "2026-10-22"
+in_container = "yes"
+os = "Linux"
+arch = "x86_64"
+kernel = "6.8.0-64-generic"
+distro_id = "alpine"
+distro_version = "3.20.10"
+distro_name = "Alpine Linux v3.20"
+macos_version = ""
+macos_clt = ""
+libc = "musl"
+libc_version = "1.2.5"
+libc_raw = "musl libc (x86_64)"
+cpu_model = ""
+cpu_count = "4"
+avx2 = "no"
+
+[bin.git]
+category = "host-hard"
+found = false
+
+[bin.curl]
+category = "host-hard"
+found = false
+
+[bin.wget]
+category = "host-hard"
+found = true
+name = "wget"
+path = "/usr/bin/wget"
+version = "1.36.1"
+raw = "BusyBox v1.36.1 (2025-11-23 14:32:18 UTC) multi-call binary."
+
+[bin.tar]
+category = "host-hard"
+found = true
+name = "tar"
+path = "/bin/tar"
+version = "1.36.1"
+raw = "tar (busybox) 1.36.1"
+
+[bin.unzip]
+category = "host-hard"
+found = true
+name = "unzip"
+path = "/usr/bin/unzip"
+version = "1.36.1"
+raw = "BusyBox v1.36.1 (2025-11-23 14:32:18 UTC) multi-call binary."
+
+[bin.cc]
+category = "host-soft"
+found = false
+
+[bin.ssh]
+category = "host-soft"
+found = false
+
+[bin.shell]
+category = "host-base"
+found = false
+
+[bin.bash]
+category = "host-base"
+found = false
+
+[bin.zsh]
+category = "host-base"
+found = false
+
+[bin.gzip]
+category = "host-base"
+found = true
+name = "gzip"
+path = "/bin/gzip"
+version = "1.36.1"
+raw = "BusyBox v1.36.1 (2025-11-23 14:32:18 UTC) multi-call binary."
+
+[bin.xz]
+category = "host-base"
+found = false
+
+[bin.nvim]
+category = "selectable"
+found = false
+
+[bin.rg]
+category = "selectable"
+found = false
+
+[bin.fd]
+category = "selectable"
+found = false
+
+[bin.fzf]
+category = "selectable"
+found = false
+
+[bin.lazygit]
+category = "selectable"
+found = false
+
+[bin.node]
+category = "selectable"
+found = false
+
+[bin.python3]
+category = "selectable"
+found = false
+
+[bin.go]
+category = "selectable"
+found = false
+
+[bin.mise]
+category = "managed"
+found = false
+
+[bin.conda]
+category = "passthrough"
+found = false
