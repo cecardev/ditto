@@ -32,6 +32,7 @@ SPIKE_SAVED_VARS="XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME XDG_CACHE_HOME GI
 # nvim wrapper (unset if the variable was unset), unrolled per variable so
 # the generated wrappers need no eval.
 _spike_restore_block() {
+	echo 'set -eu'
 	echo 'if [ "${DITTO_IN_NVIM-}" = 1 ]; then'
 	for _v in $SPIKE_SAVED_VARS; do
 		printf '\tif [ "${DITTO_ORIG_SET_%s-}" = 1 ]; then export %s="${DITTO_ORIG_%s-}"; else unset %s; fi\n' "$_v" "$_v" "$_v" "$_v"

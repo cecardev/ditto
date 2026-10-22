@@ -5,11 +5,14 @@
 #
 #   sh run.sh <dest>
 #
-# <dest> plays the workspace; .ditto/ is <dest>/.ditto. Every fixture (user
-# rc files, a host mise, a simulated conda, git config) lives in per-scenario
-# HOMEs under <dest>/homes, so run.sh writes nothing into $HOME. It still runs
-# downloaded binaries, so run it through docker.sh or macos.sh (disposable
-# HOME/TMPDIR), never with your real HOME.
+# <dest> is the spike's own directory (empty, or a previous <dest> of this
+# spike, marked with .h01b-spike): <dest>/ws plays the workspace and .ditto/
+# is <dest>/ws/.ditto. Every fixture (user rc files, a host mise, a simulated
+# conda, git config) lives in per-scenario HOMEs under <dest>/homes, and
+# TMPDIR is <dest>/tmp, so run.sh writes nothing outside <dest>. It still runs
+# downloaded binaries: it refuses to start unless $HOME is under <dest> or
+# DITTO_SPIKE_DISPOSABLE_HOME=1 (docker.sh and macos.sh set it, with a
+# throwaway HOME). Never run it with your real HOME.
 #
 # Tests (numbering of issue #4):
 #   T1  bootstrap: env.sh (H0.1) and `mise generate install-script`
@@ -19,7 +22,8 @@
 #   T5  per-tool isolation: XDG only in nvim; git/ssh from :!, :terminal,
 #       lazygit; MISE_*/[env] reaching host processes
 #   T6  overlap table: each mise feature in the pinned version
-#   T7  nothing written outside <dest> ($HOME, /tmp, $TMPDIR)
+#   T7  nothing written outside <dest> ($HOME, /tmp, the caller's $TMPDIR
+#       and, on macOS, DARWIN_USER_TEMP_DIR)
 #
 # Environment:
 #   DITTO_SPIKE_LOCK=<file>         lock (default ../h0.1-mise-aislado/mise.lock)
@@ -35,10 +39,31 @@ SPIKE_H01B_DIR=$HERE
 . "$HERE/lib.sh"
 
 [ $# -ge 1 ] || { echo "usage: $0 <dest>" >&2; exit 2; }
+# Only an empty directory or a previous <dest> of this spike: run.sh removes
+# and rewrites what is inside.
+if [ -d "$1" ] && [ -n "$(ls -A "$1")" ] && [ ! -f "$1/.h01b-spike" ]; then
+	echo "$1 is not empty and is not a previous <dest> of this spike (.h01b-spike)" >&2
+	exit 2
+fi
 mkdir -p "$1"
 DEST=$(cd "$1" && pwd -P)
+case "$(cd "$HOME" 2>/dev/null && pwd -P)/" in
+"$DEST"/*) ;;
+*)
+	if [ "${DITTO_SPIKE_DISPOSABLE_HOME:-0}" != 1 ]; then
+		echo "HOME=$HOME is not under $DEST: use docker.sh/macos.sh or set DITTO_SPIKE_DISPOSABLE_HOME=1 with a throwaway HOME" >&2
+		exit 2
+	fi
+	;;
+esac
+: >"$DEST/.h01b-spike"
+WS="$DEST/ws"
 LOGS="$DEST/spike-logs"
-mkdir -p "$LOGS"
+rm -rf "$WS" "$DEST/homes" "$DEST/tmp" "$DEST/shim" "$DEST/boot-tamper" "$LOGS"
+mkdir -p "$WS" "$LOGS" "$DEST/tmp"
+# T7 watches the caller's TMPDIR; every process of the run uses <dest>/tmp.
+ORIG_TMPDIR=${TMPDIR:-}
+export TMPDIR="$DEST/tmp"
 RESULTS="$LOGS/results.txt"
 : >"$RESULTS"
 LOCK_SRC=${DITTO_SPIKE_LOCK:-$HERE/../h0.1-mise-aislado/mise.lock}
@@ -74,13 +99,17 @@ check() {
 watch_dirs() {
 	echo "$HOME"
 	(cd /tmp && pwd -P)
-	[ -n "${TMPDIR:-}" ] && [ -d "$TMPDIR" ] && (cd "$TMPDIR" && pwd -P)
+	[ -n "$ORIG_TMPDIR" ] && [ -d "$ORIG_TMPDIR" ] && (cd "$ORIG_TMPDIR" && pwd -P)
+	# macOS: `mktemp -d` without a template ignores TMPDIR and goes here.
+	if [ "$(uname -s)" = Darwin ] && _ut=$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null) && [ -d "$_ut" ]; then
+		(cd "$_ut" && pwd -P)
+	fi
 	return 0
 }
 
 exclude_paths() {
 	awk -v dest="$DEST/" -v realtmp="$(cd /tmp && pwd -P)" -v home="$HOME" \
-		-v tmpd="$(cd "${TMPDIR:-/nonexistent}" 2>/dev/null && pwd -P)" '
+		-v tmpd="$(cd "${ORIG_TMPDIR:-/nonexistent}" 2>/dev/null && pwd -P)" '
 		$0 == home || $0 == realtmp || $0 == tmpd || $0 == dest || $0 "/" == dest { next }
 		index($0, dest) == 1 { next }
 		{ print }
@@ -90,7 +119,7 @@ exclude_paths() {
 # outside_since <marker> — paths newer than <marker> outside <dest>.
 outside_since() {
 	for _d in $(watch_dirs); do
-		find "$_d" -newer "$1" 2>/dev/null | exclude_paths |
+		find "$_d" -newer "$1" 2>/dev/null | awk -v r="$_d" '$0 != r' | exclude_paths |
 			{ if [ -n "${DITTO_SPIKE_WATCH_EXCLUDE:-}" ]; then grep -v -E "$DITTO_SPIKE_WATCH_EXCLUDE"; else cat; fi; } || true
 	done
 }
@@ -99,7 +128,7 @@ outside_since() {
 # T1 — bootstrap
 # --------------------------------------------------------------------------
 t1_bootstrap() {
-	ditto_mise_paths "$DEST/.ditto"
+	ditto_mise_paths "$WS/.ditto"
 	D=$DITTO_DIR
 	if ditto_mise_bootstrap 2>"$LOGS/bootstrap.txt"; then
 		result T1-env.sh PASS "$(ditto_mise_asset) sha256 embedded in env.sh OK"
@@ -121,12 +150,25 @@ t1_bootstrap() {
 		return 0
 	fi
 	chmod 0755 "$_p/bin/mise"
+	# The script's `mktemp -d` has no template: on macOS it ignores TMPDIR
+	# (DARWIN_USER_TEMP_DIR), and it is not removed when verification fails.
+	# A mktemp shim, only on the PATH of these calls, keeps it in <dest>/tmp.
+	_real_mktemp=$(command -v mktemp)
+	mkdir -p "$DEST/shim"
+	cat >"$DEST/shim/mktemp" <<-EOF
+		#!/bin/sh
+		set -eu
+		if [ "\$#" = 1 ] && [ "\$1" = -d ]; then exec "$_real_mktemp" -d "\$TMPDIR/tmp.XXXXXX"; fi
+		exec "$_real_mktemp" "\$@"
+	EOF
+	chmod 0755 "$DEST/shim/mktemp"
+	_shim_path="$DEST/shim:$PATH"
 	result T1-install-script-shebang INFO "$(head -n 1 "$_p/bin/mise") ($(wc -l <"$_p/bin/mise" | tr -d ' ') lines; exports $(grep -c '^ *export MISE_' "$_p/bin/mise") MISE_* only, then exec)"
 	if ! command -v bash >/dev/null 2>&1; then
 		result T1-install-script FAIL "needs bash (not POSIX sh); bash is not on this host"
 		return 0
 	fi
-	if _v=$(cd "$_p" && HOME="$DEST/homes/boot" bash "$_p/bin/mise" --version 2>"$LOGS/install-script-run.txt"); then
+	if _v=$(cd "$_p" && HOME="$DEST/homes/boot" PATH="$_shim_path" bash "$_p/bin/mise" --version 2>"$LOGS/install-script-run.txt"); then
 		_bin=$(find "$_p/.mise" -maxdepth 1 -type f -name 'mise-*' | head -n 1)
 		_got=$(ditto_sha256 "$_bin")
 		_libc=$(ditto_libc)
@@ -137,7 +179,11 @@ t1_bootstrap() {
 		for _a in "mise-v$DITTO_MISE_VERSION-$_os-$_arch" "mise-v$DITTO_MISE_VERSION-$_os-$_arch-musl"; do
 			[ "$(ditto_mise_sha256 "$_a" 2>/dev/null)" = "$_got" ] && _which=$_a
 		done
-		result T1-install-script PASS "$(echo "$_v" | head -n 1); binary ${_bin#"$DEST"/} = asset $_which (libc=$_libc); tarball sha256 embedded in the script"
+		if [ "$_which" = other ]; then
+			result T1-install-script FAIL "$(echo "$_v" | head -n 1); binary ${_bin#"$DEST"/} (sha256 $_got) matches no release asset"
+		else
+			result T1-install-script PASS "$(echo "$_v" | head -n 1); binary ${_bin#"$DEST"/} = asset $_which (libc=$_libc); tarball sha256 embedded in the script"
+		fi
 	else
 		result T1-install-script FAIL "$(tail -n 3 "$LOGS/install-script-run.txt" | tr '\n' ' ')"
 	fi
@@ -151,7 +197,7 @@ t1_bootstrap() {
 	mkdir -p "$DEST/boot-tamper/mise/bin"
 	printf '#!/bin/sh\necho tampered\n' >"$DEST/boot-tamper/mise/bin/mise"
 	(cd "$DEST/boot-tamper" && tar -czf "$_bad" mise)
-	if (cd "$_p" && HOME="$DEST/homes/boot" MISE_INSTALL_EXT=tar.gz MISE_TARBALL_URL="file://$_bad" \
+	if (cd "$_p" && HOME="$DEST/homes/boot" PATH="$_shim_path" MISE_INSTALL_EXT=tar.gz MISE_TARBALL_URL="file://$_bad" \
 		MISE_INSTALL_PATH="$_p/.mise/tampered" bash "$_p/bin/mise" --version) >"$LOGS/install-script-tamper.txt" 2>&1; then
 		result T1-install-script-tamper FAIL "tampered archive accepted: $(tail -n 2 "$LOGS/install-script-tamper.txt" | tr '\n' ' ')"
 	elif grep -q 'checksum mismatch' "$LOGS/install-script-tamper.txt" && [ ! -e "$_p/.mise/tampered" ]; then
@@ -159,6 +205,10 @@ t1_bootstrap() {
 	else
 		result T1-install-script-tamper FAIL "$(tail -n 2 "$LOGS/install-script-tamper.txt" | tr '\n' ' ')"
 	fi
+	# What the script left in its TMPDIR (a finding), then clean it.
+	_left=$(find "$TMPDIR" -mindepth 1 -maxdepth 2 2>/dev/null | sed "s#^$TMPDIR/#<tmp>/#" | tr '\n' ' ')
+	result T1-install-script-tmp INFO "left in its TMPDIR after the runs (not removed on failure): ${_left:-nothing}"
+	rm -rf "$TMPDIR"/tmp.*
 }
 
 # --------------------------------------------------------------------------
@@ -260,7 +310,7 @@ setup_scenarios() {
 		esac
 	done
 	# A workspace mise.toml (the user's own, not ditto's): A must not load it.
-	printf '[env]\nWS_MARKER = "workspace-config-leaked"\n' >"$DEST/mise.toml"
+	printf '[env]\nWS_MARKER = "workspace-config-leaked"\n' >"$WS/mise.toml"
 	# Commands sourced inside each session.
 	cat >"$DEST/check.sh" <<-EOF
 		echo "@@PATH0=\${PATH%%:*}"
@@ -306,12 +356,12 @@ run_case() {
 	*) _cmd="exec sh '$HERE/session.sh' '$D' $_l '$_sh'" ;;
 	esac
 	(
-		cd "$DEST" || exit 1
+		cd "$WS" || exit 1
 		if [ -n "$_cmd" ]; then
-			env -i HOME="$_h" SHELL="$_sh" PATH="$BASE_PATH" TERM=dumb LANG=C \
+			env -i HOME="$_h" SHELL="$_sh" PATH="$BASE_PATH" TMPDIR="$TMPDIR" TERM=dumb LANG=C \
 				"$_sh" -i -c "$_cmd" <"$LOGS/input-$_sc-$_l.txt"
 		else
-			env -i HOME="$_h" SHELL="$_sh" PATH="$BASE_PATH" TERM=dumb LANG=C \
+			env -i HOME="$_h" SHELL="$_sh" PATH="$BASE_PATH" TMPDIR="$TMPDIR" TERM=dumb LANG=C \
 				"$_sh" -i <"$LOGS/input-$_sc-$_l.txt"
 		fi
 	) >"$_out" 2>"$_out.stderr"
@@ -410,7 +460,7 @@ t3_sessions() {
 # `mise exec` (ditto run) and `mise env` (ditto env): what a child sees.
 t3_exec_env() {
 	for _m in run-a-raw run-a run-b; do
-		_e=$(cd "$DEST" && env -i HOME="$DEST/homes/clean" PATH="$BASE_PATH" sh "$HERE/session.sh" "$D" "$_m" -- env)
+		_e=$(cd "$WS" && env -i HOME="$DEST/homes/clean" PATH="$BASE_PATH" TMPDIR="$TMPDIR" sh "$HERE/session.sh" "$D" "$_m" -- env)
 		_names=$(echo "$_e" | sed -n 's/^\(_*MISE_[A-Za-z0-9_]*\)=.*/\1/p' | sort -u | tr '\n' ' ')
 		_n=$(echo "$_names" | wc -w | tr -d ' ')
 		_p0=$(echo "$_e" | sed -n 's/^PATH=//p' | cut -d: -f1)
@@ -421,7 +471,7 @@ t3_exec_env() {
 			result T3-exec-child FAIL "$_m: $_n MISE_* in the child ($(echo "$_names" | cut -c1-160)…); PATH[0]=$_p0; ws config=$_ws"
 		fi
 	done
-	_ea=$(cd "$DEST" && env -i HOME="$DEST/homes/clean" PATH="$BASE_PATH" sh "$HERE/session.sh" "$D" env-a bash)
+	_ea=$(cd "$WS" && env -i HOME="$DEST/homes/clean" PATH="$BASE_PATH" TMPDIR="$TMPDIR" sh "$HERE/session.sh" "$D" env-a bash)
 	echo "$_ea" >"$LOGS/env-a.txt"
 	result T3-env-a INFO "mise env -s bash: $(echo "$_ea" | grep -c '^export') export, $(echo "$_ea" | grep -c '^unset') unset lines; __MISE_* in output: $(echo "$_ea" | grep -c '__MISE')"
 }
@@ -442,8 +492,12 @@ t6_overlap() {
 	mkdir -p "$D/overlap"
 	printf 'SPIKE_FROM_FILE=ok\n' >"$D/overlap/x.env"
 	printf '[env]\n_.file = "%s/overlap/x.env"\n_.path = ["%s/overlap/bin"]\n' "$D" "$D" >"$D/overlap/mise.toml"
+	_h6="$DEST/homes/t6"
+	mkdir -p "$_h6"
 	_o=$( (
 		_ditto_mise_isolate
+		export HOME="$_h6" XDG_CACHE_HOME="$_h6/.cache" XDG_CONFIG_HOME="$_h6/.config" \
+			XDG_DATA_HOME="$_h6/.local/share" XDG_STATE_HOME="$_h6/.local/state"
 		export MISE_GLOBAL_CONFIG_FILE="$D/overlap/mise.toml" MISE_TRUSTED_CONFIG_PATHS="$D/overlap"
 		cd "$D/mise" && exec "$DITTO_MISE_BIN" env -s bash
 	) 2>&1)
@@ -471,19 +525,9 @@ result T0-host INFO "$(uname -sm) libc=$(ditto_libc) mise=$DITTO_MISE_VERSION"
 if t1_bootstrap; then
 	outside_since "$MARKER" >"$LOGS/outside-t1.txt"
 	if [ -s "$LOGS/outside-t1.txt" ]; then
-		result T1-install-script-outside INFO "left outside .ditto: $(head -n 3 "$LOGS/outside-t1.txt" | tr '\n' ' ')"
+		result T1-install-script-outside FAIL "left outside <dest>: $(head -n 3 "$LOGS/outside-t1.txt" | tr '\n' ' ')"
 	else
-		result T1-install-script-outside PASS "nothing left outside .ditto"
-	fi
-	# macOS mktemp -d ignores TMPDIR and uses the per-user temp dir
-	# (/var/folders/…/T), which the watch above does not cover (too noisy).
-	if [ "$(uname -s)" = Darwin ] && _ut=$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null) && [ -n "$_ut" ]; then
-		find "$_ut" -maxdepth 2 -newer "$MARKER" -name 'mise-v*' 2>/dev/null >"$LOGS/outside-t1-darwin.txt" || true
-		if [ -s "$LOGS/outside-t1-darwin.txt" ]; then
-			result T1-install-script-darwin-tmp INFO "mktemp -d ignores TMPDIR on macOS; left in DARWIN_USER_TEMP_DIR: $(sed 's#.*/T/#<DARWIN_USER_TEMP_DIR>/#' "$LOGS/outside-t1-darwin.txt" | tr '\n' ' ')"
-		else
-			result T1-install-script-darwin-tmp PASS "nothing left in DARWIN_USER_TEMP_DIR"
-		fi
+		result T1-install-script-outside PASS "nothing left outside <dest> (incl. DARWIN_USER_TEMP_DIR on macOS)"
 	fi
 fi
 if [ -n "${D:-}" ] && t2_prepare; then
@@ -495,12 +539,13 @@ fi
 
 _out="$LOGS/outside.txt"
 outside_since "$MARKER" >"$_out"
-# Known writes reported on their own: the install-script's mktemp dir
-# (T1-install-script-outside) and nvim's tempdir ($TMPDIR or /tmp/nvim.<user>,
-# out of scope here: H0.4).
+# nvim's tempdir ($TMPDIR/nvim.<user>, /tmp/nvim.<user> without TMPDIR) on
+# its own line: the sessions get TMPDIR=<dest>/tmp, so it must stay there.
 grep -E '/nvim\.[^/]+(/|$)' "$_out" >"$LOGS/outside-nvim.txt" || true
 if [ -s "$LOGS/outside-nvim.txt" ]; then
-	result T7-nvim-tmp INFO "nvim tempdir outside .ditto (H0.4): $(head -n 3 "$LOGS/outside-nvim.txt" | tr '\n' ' ')"
+	result T7-nvim-tmp FAIL "nvim tempdir outside <dest>: $(head -n 3 "$LOGS/outside-nvim.txt" | tr '\n' ' ')"
+else
+	result T7-nvim-tmp PASS "nvim tempdir under <dest>/tmp"
 fi
 grep -v -E '/nvim\.[^/]+(/|$)' "$_out" | grep -v -F -x -f "$LOGS/outside-t1.txt" >"$_out.rest" || true
 mv "$_out.rest" "$_out"

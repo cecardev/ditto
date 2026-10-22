@@ -10,7 +10,7 @@
 
 1. **El rc del usuario reordena el `PATH` después de `mise en`.** `mise en` calcula el entorno y *después* arranca el shell, que carga `.bashrc`/`.zshrc`. Con conda o con un rc que reconstruye `PATH`, `.ditto/bin` deja de ir primero y `rg`/`nvim` resuelven al de conda o al de `~/bin`. mise no tiene ningún punto de enganche posterior al rc.
 2. **Un mise del host activado en el rc deshace la sesión.** `mise en` deja en el hijo `__MISE_DIFF` (el diff que aplicó). El `hook-env` del mise del host lo lee en el primer prompt y lo revierte: desaparecen `DITTO_ACTIVE`, `DITTO_ROOT` y `.ditto/bin` del `PATH`.
-3. **Variables de mise en los procesos del host.** Con el `[env]` mínimo del issue, `mise en` y `mise exec` pasan al hijo las 22 `MISE_*` del aislamiento de H0.1 (`MISE_DATA_DIR`, `MISE_GLOBAL_CONFIG_FILE`, `MISE_IGNORED_CONFIG_PATHS`…). Cualquier `mise` del host lanzado desde la subshell usaría el store y la config de ditto. Además, `mise en <workspace>` carga el `mise.toml` del workspace del usuario aunque `MISE_CEILING_PATHS` apunte a `.ditto`. Se puede mitigar casi todo (`VAR = false` en `[env]` y `MISE_OVERRIDE_*_FILENAMES`), pero **`__MISE_DIFF` no se puede quitar**.
+3. **Variables de mise en los procesos del host.** Con el `[env]` mínimo del issue, `mise en` y `mise exec` pasan al hijo las 21 `MISE_*` del aislamiento de H0.1, más `__MISE_DIFF` (`MISE_DATA_DIR`, `MISE_GLOBAL_CONFIG_FILE`, `MISE_IGNORED_CONFIG_PATHS`…). Cualquier `mise` del host lanzado desde la subshell usaría el store y la config de ditto. Además, `mise en <workspace>` carga el `mise.toml` del workspace del usuario aunque `MISE_CEILING_PATHS` apunte a `.ditto`. Se puede mitigar casi todo (`VAR = false` en `[env]` y `MISE_OVERRIDE_*_FILENAMES`), pero **`__MISE_DIFF` no se puede quitar**.
 
 El aislamiento por herramienta (XDG solo en nvim, `.host-sh`, wrappers que restauran el entorno) **no depende de A o B**: funciona igual con las dos, porque vive en los wrappers de `.ditto/bin`. La sesión propia de ditto (B: `--rcfile` en bash, `ZDOTDIR` en zsh y hook de prompt) pasa todas las verificaciones de interferencia en las cinco plataformas probadas.
 
@@ -20,7 +20,7 @@ El aislamiento por herramienta (XDG solo en nvim, `.host-sh`, wrappers que resta
 |---|---|
 | `lib.sh` | Librería POSIX. Carga `../h0.1-mise-aislado/env.sh` **sin modificarlo** y añade: wrappers sh (`nvim`, `lazygit`, `rg`, `.host-sh` y `.probe`), la config de sesión de A (`mise-raw.toml`, `mise-clean.toml`), `spike_mise_session` y los rc de B (`bashrc`, `zsh/.zshenv`, `zsh/.zshrc`, `path.sh`). |
 | `session.sh <ditto_dir> <modo> [shell]` | Sustituto de `ditto up`/`env`/`run` en los dos diseños: `up-a`, `up-a-raw`, `up-a-rc` (híbrido), `up-b`, `env-a`, `env-b`, `run-a`, `run-a-raw`, `run-b`. |
-| `run.sh <dest>` | Pruebas T1–T7 sobre `<dest>/.ditto`. Imprime `RESULT <id> <PASS\|FAIL\|INFO\|SKIP> …`. No escribe en `$HOME`: cada escenario tiene su HOME bajo `<dest>/homes/`. |
+| `run.sh <dest>` | Pruebas T1–T7. `<dest>` es un directorio propio del spike (vacío o de una ejecución anterior, marcado con `.h01b-spike`; si no, aborta): el workspace es `<dest>/ws`, `.ditto` es `<dest>/ws/.ditto` y `TMPDIR=<dest>/tmp`. Aborta si `$HOME` no está bajo `<dest>` y no hay `DITTO_SPIKE_DISPOSABLE_HOME=1` (lo exportan `docker.sh` y `macos.sh`). Imprime `RESULT <id> <PASS\|FAIL\|INFO\|SKIP> …`. No escribe en `$HOME`: cada escenario tiene su HOME bajo `<dest>/homes/`. |
 | `nvim-check.lua` | Lo que ven nvim y sus hijos (`:!`, `system()` con lista, `:terminal`, lazygit). |
 | `docker.sh <imagen> <arch> <workdir>` | Driver Linux: imagen con bash, zsh, git y cliente ssh, y un `~/.ssh/config` de prueba en el home de passwd (`/root`). |
 | `macos.sh <scratch>` | Driver macOS: `HOME`/`TMPDIR` desechables, `env -i` y barrido completo del `$HOME` real al terminar. |
@@ -42,7 +42,7 @@ DITTO_ACTIVE = "1"
 DITTO_ROOT = "<ws>/.ditto"
 _.path = ["<ws>/.ditto/bin"]
 # solo en "clean": cada MISE_* del aislamiento a false (mise la quita del hijo)
-MISE_DATA_DIR = false   # … (25 variables)
+MISE_DATA_DIR = false   # … (23 variables: las 21 del aislamiento y las 2 MISE_OVERRIDE_*)
 ```
 
 - `up-a-raw`: `mise en -s "<shell> -i" <ws>` con el `[env]` mínimo del issue.
@@ -62,7 +62,7 @@ MISE_DATA_DIR = false   # … (25 variables)
 | Escenario | rc del usuario (bash y zsh) |
 |---|---|
 | `clean` | solo un marcador `DITTO_SPIKE_RC_LOADED=1` |
-| `conda` | bloque `conda initialize` **simulado**: `CONDA_PREFIX`… y `PATH="$HOME/miniconda3/bin:$HOME/miniconda3/condabin:$PATH"`, con `rg`, `nvim` y `python` falsos en `miniconda3/bin` |
+| `conda` (**simulado**) | bloque `conda initialize` simulado: `CONDA_PREFIX`… y `PATH="$HOME/miniconda3/bin:$HOME/miniconda3/condabin:$PATH"`, con `rg`, `nvim` y `python` falsos en `miniconda3/bin` |
 | `pathreset` | `export PATH="$HOME/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"` (reconstruye el `PATH`), con un `rg` falso en `~/bin` |
 | `hostmise` | `eval "$(~/.local/bin/mise activate <shell>)"`: un mise del host (mismo binario, sin aislar) con `~/.config/mise/config.toml` que define `[env] HOST_MISE_MARKER` y `_.path` hacia un directorio con un `rg` falso |
 | `hostmiseaggr` | igual, con `[settings] activate_aggressive = true`: `hook-env` antepone sus rutas en cada prompt |
@@ -97,7 +97,7 @@ Los resultados de A son idénticos en las cinco plataformas y en los dos shells.
 | Shell | **bash** (`#!/usr/bin/env bash`, `local`, `exec -a`), no POSIX sh. En Alpine (sin bash) no funciona |
 | Aislamiento | `--localize` solo exporta 7 variables (`MISE_DATA_DIR`, `CONFIG_DIR`, `CACHE_DIR`, `STATE_DIR`, `INSTALL_PATH`, `TRUSTED_CONFIG_PATHS`, `IGNORED_CONFIG_PATHS`) y hace `exec` de mise. No borra las `MISE_*` del host ni fija `MISE_GLOBAL_CONFIG_FILE`, `MISE_SYSTEM_*`, `MISE_CEILING_PATHS`, la telemetría ni `HOME`/`XDG_*` (caché de sigstore). Es decir, no cubre el aislamiento de H0.1 |
 | Ubicación | El proyecto es el directorio padre del script (`<proyecto>/bin/mise` → datos en `<proyecto>/.mise`). Ponerlo en `.ditto/bin/mise` sombrearía el `mise` del host |
-| Escrituras fuera | descarga en `mktemp -d`: `$TMPDIR` o `/tmp` en Linux, y en macOS el temporal por usuario (`getconf DARWIN_USER_TEMP_DIR`, `/var/folders/…/T`), **ignorando `TMPDIR`**. Si la verificación falla, **no lo borra**: quedó `tmp.XXXX/mise-v2026.10.15-<os>-<arch>.tar.gz` en `/tmp` (Linux) y en `DARWIN_USER_TEMP_DIR` (macOS) |
+| Escrituras fuera | descarga en `mktemp -d`: `$TMPDIR` o `/tmp` en Linux, y en macOS el temporal por usuario (`getconf DARWIN_USER_TEMP_DIR`, `/var/folders/…/T`), **ignorando `TMPDIR`**. Si la verificación falla, **no lo borra**: en las primeras ejecuciones quedó `tmp.XXXX/mise-v2026.10.15-<os>-<arch>.tar.gz` en `/tmp` (Linux) y en `DARWIN_USER_TEMP_DIR` (macOS). Ahora `run.sh` antepone, solo en esas llamadas, un shim de `mktemp` que convierte `mktemp -d` en `mktemp -d "$TMPDIR/tmp.XXXXXX"` (`TMPDIR=<dest>/tmp`), registra lo que queda (`T1-install-script-tmp`) y lo borra |
 
 **Conclusión T1:** sirve para que un repo lleve su propio `bin/mise`, pero no sustituye a `install.sh` (que instala **ditto**, no mise) ni al bootstrap de ditto, que ya embebe el sha256 del binario y aplica el aislamiento completo de H0.1. Fila «Repetición parcial» → **no se adopta**.
 
@@ -109,17 +109,17 @@ Los resultados de A son idénticos en las cinco plataformas y en los dos shells.
 | `.ditto/bin` primero **después** del rc | ❌ `mise en` no tiene enganche posterior al rc (T4) | ✅ |
 | `DITTO_ACTIVE` y `DITTO_ROOT` | ✅ vía `[env]`, salvo con un mise del host activado (T4) | ✅ |
 | Restaurar `ZDOTDIR` en shells anidadas | — (no lo usa) | ✅ |
-| `ditto env` (`eval`, tmux) | ⚠️ `mise env` funciona, pero con la config `clean` emite 23 `unset MISE_*`, que borrarían las `MISE_*` propias del usuario en su shell. Con la `raw` no las emite. Aporta solo tres `export` | ✅ tres `export` |
-| `ditto run -- cmd` | ❌ `mise exec` pasa al hijo 22 `MISE_*` (`raw`) o `__MISE_DIFF` (`clean`) | ✅ 0 `MISE_*` |
+| `ditto env` (`eval`, tmux) | ⚠️ `mise env` funciona, pero con la config `clean` emite 23 `unset MISE_*` (una por cada `VAR = false`), que borrarían las `MISE_*` propias del usuario en su shell. Con la `raw` no las emite. Aporta solo tres `export` | ✅ tres `export` |
+| `ditto run -- cmd` | ❌ `mise exec` pasa al hijo las 21 `MISE_*` del aislamiento más `__MISE_DIFF` (`raw`; el spike las cuenta como 22) o solo `__MISE_DIFF` (`clean`) | ✅ 0 `MISE_*` |
 | No anidar | igual en A y B: depende de `DITTO_ACTIVE` | |
 
 ### T4 — Interferencia con el host
 
-Fallos por lanzador × escenario (iguales en macOS y Linux, bash y zsh):
+Fallos por lanzador × escenario (iguales en macOS y Linux, bash y zsh). El escenario conda es **simulado** (ver *Montaje*):
 
-| Lanzador | clean | conda | pathreset | hostmise | hostmiseaggr |
+| Lanzador | clean | conda (simulado) | pathreset | hostmise | hostmiseaggr |
 |---|---|---|---|---|---|
-| `up-a-raw` (`mise en`, `[env]` mínimo) | ❌ 22 `MISE_*` + `__MISE_DIFF` en la subshell; carga `<ws>/mise.toml` | — | — | — | — |
+| `up-a-raw` (`mise en`, `[env]` mínimo) | ❌ 21 `MISE_*` + `__MISE_DIFF` en la subshell; carga `<ws>/mise.toml` | — | — | — | — |
 | `up-a` (`mise en`, config `clean`) | ❌ `__MISE_DIFF` | ❌ `PATH[0]` = `miniconda3/bin`, `rg` de conda; `__MISE_DIFF` | ❌ `PATH[0]` = `~/bin`, `rg` falso; `__MISE_DIFF` | ❌ el mise del host revierte el diff: sin `DITTO_ACTIVE`/`DITTO_ROOT`, `rg` del host | ❌ ídem |
 | `up-a-rc` (híbrido) | ❌ `__MISE_DIFF` | ❌ `__MISE_DIFF` | ❌ `__MISE_DIFF` | ✅ | ✅ |
 | `env-a` (`eval "$(mise env)"`) | ✅ | ✅ | ✅ | ✅ | ❌ `PATH[0]` = rutas del mise del host |
@@ -185,15 +185,15 @@ mise se queda con lo que hace bien y se usa **solo durante la instalación**: `i
 ### T7 — Escrituras fuera de `<dest>`
 
 - `find $HOME /tmp $TMPDIR -newer <marker>`: vacío en todas las plataformas, salvo dos casos que se anotan aparte:
-  - `install-script` deja su `mktemp -d` cuando falla la verificación (prueba de manipulación): en `/tmp` en Linux y en `DARWIN_USER_TEMP_DIR` en macOS, que el barrido general no cubre (demasiado ruido) y que `run.sh` revisa aparte (`T1-install-script-darwin-tmp`). Ver *Pendientes* para la limpieza en el Mac de desarrollo.
-  - **nvim crea `/tmp/nvim.<usuario>/`** (`$TMPDIR/nvim.<usuario>` en macOS) para sus temporales cuando la sesión no tiene `TMPDIR` dentro de `.ditto` (aquí los shells corren con `env -i`). Pertenece a H0.4 (escrituras de LazyVim/nvim fuera de `.ditto`).
-- En la última ejecución en macOS, `T7-outside` marcó 2 rutas: archivos que el propio agente escribió en su directorio de trabajo, fuera de `<dest>`, mientras corría el spike. Es ruido ajeno al spike. El ruido de `/tmp` de otros procesos se excluye con `DITTO_SPIKE_WATCH_EXCLUDE` (sin valor por defecto).
+  - `install-script` deja su `mktemp -d` cuando falla la verificación (prueba de manipulación). Con el shim de `mktemp` queda en `<dest>/tmp`, y `T1-install-script-outside` exige que no aparezca nada fuera de `<dest>`, incluido `DARWIN_USER_TEMP_DIR` en macOS (que ahora forma parte del barrido de T7). Ver *Pendientes* para los restos de las primeras ejecuciones.
+  - nvim crea `$TMPDIR/nvim.<usuario>/` para sus temporales (`/tmp/nvim.<usuario>` si no hay `TMPDIR`). Las sesiones reciben ahora `TMPDIR=<dest>/tmp`, y `T7-nvim-tmp` exige PASS. En el producto, el `TMPDIR` de la sesión es el del usuario: dónde escribe nvim sus temporales se decide en H0.4.
+- En la ejecución final en macOS (tras la ronda de revisión), `T7-outside` pasa con `$HOME`, `/tmp`, el `TMPDIR` del llamador y `DARWIN_USER_TEMP_DIR` vigilados. El ruido de otros procesos en `/tmp` se excluye con `DITTO_SPIKE_WATCH_EXCLUDE` (sin valor por defecto).
 - macOS, barrido completo del `$HOME` real (`macos.sh`): ninguna ruta de mise, shells ni herramientas. El resto (vscode-server, colima, procesos de otros agentes) es actividad ajena de la máquina.
 
 ### Comandos
 
 ```sh
-# macOS (HOME/TMPDIR desechables; nada en el $HOME real)
+# macOS (HOME/TMPDIR desechables; nada en el $HOME real; <dest> = $SCRATCH/mac/dest)
 DITTO_SPIKE_WATCH_EXCLUDE='<ruido ajeno en /tmp, si lo hay>' sh spikes/h0.1b-mise-sesion/macos.sh "$SCRATCH/mac"
 # Linux (nativo arm64 y emulado amd64)
 sh spikes/h0.1b-mise-sesion/docker.sh ubuntu-22.04 arm64 "$SCRATCH/u22-arm64"
@@ -202,7 +202,7 @@ sh spikes/h0.1b-mise-sesion/docker.sh ubuntu-18.04 arm64 "$SCRATCH/u18-arm64"
 sh spikes/h0.1b-mise-sesion/docker.sh ubuntu-18.04 amd64 "$SCRATCH/u18-amd64"
 ```
 
-Totales de la última ejecución (`SUMMARY`; los FAIL son los de A, `env-*` con `hostmiseaggr` y `GIT_CONFIG_GLOBAL` en git 2.17, descritos arriba): macOS 682 PASS / 47 FAIL (incluye las 2 rutas de ruido de T7); Ubuntu 22.04 arm64 y amd64 749 / 46; Ubuntu 18.04 arm64 y amd64 727 / 68.
+Totales (`SUMMARY`; los FAIL son los esperados: variantes A, `env-*` con `hostmiseaggr` y `GIT_CONFIG_GLOBAL` en git 2.17). Con el código final (ronda de revisión: shim de `mktemp`, `TMPDIR=<dest>/tmp`, `<dest>/ws`, guarda de `HOME`, `set -eu` en los wrappers): macOS arm64 685 PASS / 46 FAIL; Ubuntu 22.04 arm64 751 PASS / 46 FAIL. Ubuntu 22.04 amd64 (749 / 46) y Ubuntu 18.04 arm64/amd64 (727 / 68) son de la versión anterior del spike. Esos cambios no alteran las pruebas de sesión, y su resultado era idéntico al de las otras plataformas.
 
 ## Hallazgos adicionales
 
@@ -223,6 +223,7 @@ Totales de la última ejecución (`SUMMARY`; los FAIL son los de A, `env-*` con 
 - [ ] **`ditto env` en tmux** con un hook agresivo del host: definir si `ditto env` imprime también el hook.
 - [ ] **Limpieza en el Mac de desarrollo** (fuera de `$HOME`): las pruebas de manipulación de `install-script` dejaron directorios `tmp.XXXX/` con un tarball falso de ~180 bytes (`mise-v2026.10.15-macos-arm64.tar.gz`, contiene un script que solo hace `echo tampered`) en el temporal por usuario. No se borraron desde el spike. Para listarlos y borrarlos: `ls -d "$(getconf DARWIN_USER_TEMP_DIR)"tmp.*/mise-v2026.10.15-macos-arm64.tar.gz` y, tras revisarlos, `rm -r` de esos `tmp.*`. macOS también los purga solo.
 - [ ] **H0.1 (T7) tampoco vigilaba `DARWIN_USER_TEMP_DIR`** en macOS: lo que se escriba con `mktemp` sin plantilla no aparecía en su barrido.
+- [ ] **Para H1.6**: (1) en bash ≥ 5.1 `PROMPT_COMMAND` puede ser un array. El prototipo lo trata como cadena: con un array, la asignación modifica solo el elemento 0, así que el hook de ditto no quedaría el último. Si es un array, hay que hacer `PROMPT_COMMAND+=(__ditto_path)`. (2) `ditto env` (y los rc generados) deben escapar las rutas para el shell. El prototipo (`spike_env_b`) las envuelve en comillas simples, y una ruta con `'` lo rompe.
 - [ ] Llevar la decisión a arch.md y roadmap.md con `/record-decision` (no se editan en esta story).
 
 ## Decisión propuesta

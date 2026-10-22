@@ -15,14 +15,14 @@ HERE=$(cd "$(dirname "$0")" && pwd -P)
 mkdir -p "$1"
 S=$(cd "$1" && pwd -P)
 REAL_HOME=$HOME
-rm -rf "$S/ws"
-mkdir -p "$S/home" "$S/tmp" "$S/ws"
+
+mkdir -p "$S/home" "$S/tmp"
 : >"$S/real-home-marker"
 sleep 1
 
-env -i HOME="$S/home" TMPDIR="$S/tmp" PATH=/usr/bin:/bin:/usr/sbin:/sbin TERM=dumb LANG=C \
+env -i HOME="$S/home" TMPDIR="$S/tmp" PATH=/usr/bin:/bin:/usr/sbin:/sbin TERM=dumb LANG=C DITTO_SPIKE_DISPOSABLE_HOME=1 \
 	DITTO_SPIKE_WATCH_EXCLUDE="${DITTO_SPIKE_WATCH_EXCLUDE:-}" \
-	sh "$HERE/run.sh" "$S/ws"
+	sh "$HERE/run.sh" "$S/dest"
 rc=$?
 
 find "$REAL_HOME" -newer "$S/real-home-marker" 2>/dev/null |

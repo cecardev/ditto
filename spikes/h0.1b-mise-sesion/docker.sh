@@ -7,7 +7,7 @@
 #
 # amd64 on an arm64 host runs emulated (--platform linux/amd64). The
 # containers run as root: on a Linux docker host <work-dir> ends up owned by
-# root (remove it with `docker run --rm -v <work-dir>:/w alpine rm -rf /w/ws`).
+# root (remove it with `docker run --rm -v <work-dir>:/w alpine rm -rf /w/dest`).
 set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd -P)
@@ -31,8 +31,8 @@ printf 'FROM %s\nRUN %s\nRUN %s\n' "$IMAGE" "$PREREQ" "$SSH_FIXTURE" |
 # MISE_* as a host user with mise would have them exported in the shell that
 # runs ditto: the isolation must drop them.
 echo "== $KEY linux/$ARCH ($IMAGE)" >&2
-rm -rf "$WORK/ws"
-docker run --rm --platform "linux/$ARCH" -e DITTO_SPIKE_SSH_FIXTURE=1 \
+
+docker run --rm --platform "linux/$ARCH" -e DITTO_SPIKE_SSH_FIXTURE=1 -e DITTO_SPIKE_DISPOSABLE_HOME=1 \
 	-e MISE_DATA_DIR=/root/host-mise -e MISE_ENV=host -e MISE_SHIMS_DIR=/root/host-mise/shims \
 	-v "$SPIKES:/spikes:ro" -v "$WORK:/work" "$TAG" \
-	sh /spikes/h0.1b-mise-sesion/run.sh /work/ws
+	sh /spikes/h0.1b-mise-sesion/run.sh /work/dest
