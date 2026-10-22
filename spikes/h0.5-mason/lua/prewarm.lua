@@ -190,7 +190,6 @@ step("mason", function()
       return pending == 0 and not installing()
     end, 500), "timeout waiting for Mason")
   end
-  local finished = true
   report.mason.ms = ms_since(t0)
   report.mason.wanted = wanted
   report.mason.failures = failures
@@ -206,7 +205,6 @@ step("mason", function()
     reg[#reg + 1] = src:get_display_name()
   end
   report.mason.registry = reg
-  assert(finished, "timeout waiting for Mason")
   assert(#missing == 0, "not installed: " .. table.concat(missing, ",") .. " " .. vim.inspect(failures))
 end)
 

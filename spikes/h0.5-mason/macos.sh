@@ -19,6 +19,8 @@ S=$(cd "$1" && pwd -P)
 case "$S" in /|"$HOME"|"$HOME"/*) echo "refusing scratch dir $S (inside the real HOME or /)" >&2; exit 2 ;; esac
 REAL_HOME=$HOME
 # Only our own subdirectories are reset.
+# The Go module cache (GOMODCACHE) is read-only: make it writable first.
+chmod -R u+w "${S:?}/home" "${S:?}/tmp" "${S:?}/run" 2>/dev/null
 rm -rf "${S:?}/home" "${S:?}/tmp" "${S:?}/run"
 mkdir -p "$S/home" "$S/tmp" "$S/run"
 : >"$S/real-home-marker"

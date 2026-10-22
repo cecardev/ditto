@@ -43,6 +43,24 @@ H05_DIR=$HERE
 	echo "refusing: \$HOME must be disposable (set DITTO_SPIKE_DISPOSABLE_HOME=1; see macos.sh/docker.sh)" >&2
 	exit 2
 }
+# Second guard (as in #6): outside a container, $HOME must not be the real
+# home of the user (passwd/Directory Services) and must live under /tmp.
+if [ ! -f /.dockerenv ] && [ ! -f /run/.containerenv ]; then
+	_me=$(id -un)
+	case "$(uname -s)" in
+	Darwin) _real_home=$(dscl . -read "/Users/$_me" NFSHomeDirectory 2>/dev/null | sed 's/^NFSHomeDirectory: *//') ;;
+	*) _real_home=$(getent passwd "$_me" 2>/dev/null | cut -d: -f6) ;;
+	esac
+	_h=$(cd "$HOME" 2>/dev/null && pwd -P) || _h=$HOME
+	if [ -z "$_real_home" ] || [ "$_h" = "$_real_home" ] || [ "$HOME" = "$_real_home" ]; then
+		echo "refusing: \$HOME ($HOME) is the real home of $_me (or it could not be determined)" >&2
+		exit 2
+	fi
+	case "$_h" in
+	/tmp/* | /private/tmp/*) ;;
+	*) echo "refusing: outside a container \$HOME must be under /tmp or /private/tmp (got $_h)" >&2; exit 2 ;;
+	esac
+fi
 mkdir -p "$1"
 DEST=$(cd "$1" && pwd -P)
 MODE=${2:-test}
@@ -107,12 +125,18 @@ with_timeout() {
 # ---------------------------------------------------------------------------
 
 make_fixtures() {
-	for _f in .bashrc .npmrc .config/pip .config/go hostbin; do
+	_fx=".bashrc .npmrc .config/pip .config/go hostbin"
+	for _f in $_fx; do
 		if [ -e "$HOME/$_f" ] || [ -L "$HOME/$_f" ]; then
 			echo "refusing: \$HOME/$_f already exists; run.sh only writes its fixtures into an empty, disposable \$HOME" >&2
 			exit 2
 		fi
 	done
+	# macOS go env lives under a path with a space: checked on its own.
+	if [ "$(uname -s)" = Darwin ] && { [ -e "$HOME/Library/Application Support/go" ] || [ -L "$HOME/Library/Application Support/go" ]; }; then
+		echo "refusing: \$HOME/Library/Application Support/go already exists; run.sh only writes its fixtures into an empty, disposable \$HOME" >&2
+		exit 2
+	fi
 	mkdir -p "$HOME/hostbin" "$HOME/.config/pip" "$HOME/.config/go"
 	for _b in node python3; do
 		printf '#!/bin/sh\necho "host-%s"\n' "$_b" >"$HOME/hostbin/$_b"
@@ -336,7 +360,6 @@ for _l in "$MASON"/bin/*; do
 	esac
 	# Same PATH as inside nvim: runtimes + mason/bin (Mason prepends it).
 	_o=$(with_timeout 60 env PATH="$MASON/bin:$RT_PATH:$BASE_PATH" HOME="$DEST/driver" "$_l" $_arg </dev/null 2>&1 | head -n 3 | tr '\n' ' ')
-	_rc=$?
 	echo "$_n|$_o" >>"$LOGS/bins.txt"
 	if echo "$_o" | grep -qE 'GLIBC_|GLIBCXX_|not found|cannot execute|Exec format'; then
 		result "T5-bin-$_n" FAIL "$_o"
