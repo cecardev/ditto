@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Spike H0.4: fake local MCP server started by OpenCode through npx. Records
 // the environment it receives (what matters for writes) and exits, so the MCP
-// handshake fails on purpose. No network, no dependencies.
+// handshake fails on purpose. No package is downloaded (local folder), no dependencies.
 const fs = require("fs");
 const keep = /^(XDG_|OPENCODE|DITTO|HOME$|TMPDIR$|PATH$|npm_config_|SHELL$)/;
 const lines = Object.keys(process.env)

@@ -6,9 +6,9 @@
 #
 #   sh oc-session.sh <out-dir> <tag>
 #
-# No credentials are used. `opencode run` is attempted only with a free
-# OpenCode Zen model listed by `opencode models` (no login); H04_OC_RUN=0
-# skips it. Writes <out>/<tag>-opencode.log and <out>/<tag>-oc.done.
+# No credentials are used. `opencode run` (a prompt sent to OpenCode Zen with
+# a free model listed by `opencode models`) is OPT-IN: only with H04_OC_RUN=1.
+# Writes <out>/<tag>-opencode.log and <out>/<tag>-oc.done.
 set -u
 out=$1
 tag=$2
@@ -50,14 +50,14 @@ oc 8 serve --port 0 --hostname 127.0.0.1
 # Free models come and go (a free model may answer with a server error):
 # try up to three, stop at the first success.
 models=$(grep -E '^opencode/[^ ]*free' "$out/$tag-models.txt" | head -n 3 || true)
-if [ "${H04_OC_RUN:-1}" = 1 ] && [ -n "$models" ]; then
+if [ "${H04_OC_RUN:-0}" = 1 ] && [ -n "$models" ]; then
 	for model in $models; do
 		echo "# short request with free model $model (no credentials)" >>"$log"
 		oc 180 run -m "$model" "Responde solo con la palabra: ok"
 		tail -n 1 "$log" | grep -q '^exit=0$' && break
 	done
 else
-	echo "# opencode run skipped (H04_OC_RUN=${H04_OC_RUN:-1}, models='${models}')" >>"$log"
+	echo "# opencode run skipped (opt-in: H04_OC_RUN=${H04_OC_RUN:-0})" >>"$log"
 fi
 oc 60 session list
 : >"$out/$tag-oc.done"

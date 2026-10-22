@@ -153,19 +153,31 @@ h04_install_tools() {
 	ditto_mise install --locked >&2
 }
 
+# _h04_before_exec <wrapper> <line>... — inserts sh lines right before the
+# final `exec` of a generated wrapper (h03_write_tool_wrapper has no hook).
+_h04_before_exec() {
+	_bw=$1
+	shift
+	for _bl in "$@"; do
+		awk -v l="$_bl" '/^exec / { print l } { print }' "$_bw" >"$_bw.new" && mv "$_bw.new" "$_bw" || return 1
+	done
+	chmod 0755 "$_bw"
+}
+
 # h04_write_opencode_wrapper <abs-opencode> <node-bin-or-empty> [VAR=value...]
 # — the H0.2 variables through the H0.3 tool wrapper (restores DITTO_ORIG_*
-# first). MCP runtimes (node) only in its PATH.
+# first). MCP runtimes (node) only in its PATH. .ditto/tmp is created right
+# before the exec (the x64 build aborts when TMPDIR does not exist, H0.2).
 h04_write_opencode_wrapper() {
 	_oc=$1 _nb=$2
 	shift 2
-	mkdir -p "$DITTO_ROOT/tmp"
 	set -- 'XDG_CONFIG_HOME=$DITTO_ROOT/config' 'XDG_DATA_HOME=$DITTO_ROOT/data' \
 		'XDG_STATE_HOME=$DITTO_ROOT/state' 'XDG_CACHE_HOME=$DITTO_ROOT/cache' \
 		'OPENCODE_CONFIG_DIR=$DITTO_ROOT/config/opencode' 'TMPDIR=$DITTO_ROOT/tmp' \
 		'OPENCODE_DISABLE_AUTOUPDATE=1' "$@"
 	[ -n "$_nb" ] && set -- "$@" "PATH=$_nb:\$PATH"
-	h03_write_tool_wrapper opencode "$_oc" "$@"
+	h03_write_tool_wrapper opencode "$_oc" "$@" || return 1
+	_h04_before_exec "$DITTO_ROOT/bin/opencode" 'mkdir -p "$TMPDIR"'
 }
 
 # h04_install_starter <dest-dir> — copy of the H0.3 starter with Mason enabled
@@ -186,21 +198,28 @@ h04_install_starter() {
 
 # h04_apply_proposed — rewrites the wrappers/rc with the mechanisms proposed
 # by this spike (see RESULTS.md). Requires the tools to be installed.
-#   lazygit:  TMPDIR=$DITTO_ROOT/tmp (lazygit-<uid> temp dir)
-#   opencode: npm_config_cache=$DITTO_ROOT/cache/npm (npx MCPs -> ~/.npm)
-#   nvim:     npm_config_cache too (Mason npm packages), saved/restored
+#   all wrappers: npm_config_cache and npm_config_update_notifier join the
+#             DITTO_ORIG_* list (saved by nvim, restored by every other
+#             wrapper and by .host-sh): no child shell or tool sees ditto's values
+#   nvim:     npm_config_cache=$DITTO_ROOT/cache/npm (Mason npm packages)
+#   lazygit:  TMPDIR=$DITTO_ROOT/tmp, created before the exec (lazygit-<uid>)
+#   opencode: npm_config_cache too (npx MCPs -> ~/.npm otherwise)
+#   nvim, opencode: npm_config_update_notifier=false (no registry check)
 h04_apply_proposed() {
-	H03_SAVED_VARS="$H03_SAVED_VARS npm_config_cache"
-	h03_write_nvim_wrapper "$(h03_tool nvim)" || return 1
-	_w="$DITTO_ROOT/bin/nvim"
-	awk '/^exec / { print "export npm_config_cache=\"$DITTO_ROOT/cache/npm\""; print "mkdir -p \"$npm_config_cache\"" } { print }' "$_w" >"$_w.new" &&
-		mv "$_w.new" "$_w" && chmod 0755 "$_w"
+	H03_SAVED_VARS="$H03_SAVED_VARS npm_config_cache npm_config_update_notifier"
+	# Every wrapper (nvim, lazygit, rg, fd, fzf, tree-sitter, .host-sh) with the
+	# longer DITTO_ORIG_* list; then the tool-specific changes on top.
+	h03_write_wrappers || return 1
+	_h04_before_exec "$DITTO_ROOT/bin/nvim" \
+		'export npm_config_cache="$DITTO_ROOT/cache/npm" npm_config_update_notifier=false' \
+		'mkdir -p "$npm_config_cache"' || return 1
 	h03_write_tool_wrapper lazygit "$(h03_tool lazygit)" \
 		'CONFIG_DIR=$DITTO_ROOT/config/lazygit' \
 		'LG_CONFIG_FILE=${LG_CONFIG_FILE:-$DITTO_ROOT/config/lazygit/config.yml}' \
 		'TMPDIR=$DITTO_ROOT/tmp' || return 1
-	h04_write_opencode_wrapper "$(h03_tool opencode)" "${H04_NODE_BIN:-}" 'npm_config_cache=$DITTO_ROOT/cache/npm' || return 1
-	h03_write_host_sh
+	_h04_before_exec "$DITTO_ROOT/bin/lazygit" 'mkdir -p "$TMPDIR"' || return 1
+	h04_write_opencode_wrapper "$(h03_tool opencode)" "${H04_NODE_BIN:-}" \
+		'npm_config_cache=$DITTO_ROOT/cache/npm' 'npm_config_update_notifier=false'
 }
 
 # ---------------------------------------------------------------------------

@@ -35,7 +35,7 @@ docker run --name "$NAME" --platform "linux/$ARCH" --cap-add SYS_PTRACE --user d
 	-e H04_WS=/w -e H04_SNAP_ROOTS=root=/ -e H04_SNAP_PRUNE=/spikes \
 	-e H04_PTY_ENV_EXTRA=XDG_RUNTIME_DIR=/run/user/1000 -e H04_STRACE="$STRACE" \
 	-e H04_INOTIFY="/tmp /var/tmp /home/dev /run/user/1000" \
-	-e H04_PHASES="${H04_PHASES:-A B}" -e H04_OC_RUN="${H04_OC_RUN:-1}" \
+	-e H04_PHASES="${H04_PHASES:-A B}" -e H04_OC_RUN="${H04_OC_RUN:-0}" \
 	-v "$HERE/..:/spikes:ro" "$TAG" \
 	sh /spikes/h0.4-escrituras/run.sh /r "$PROFILE"
 rc=$?

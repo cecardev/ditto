@@ -34,7 +34,7 @@
 #   H04_INOTIFY="dir ..."  inotifywait on these dirs during the sessions
 #   H04_PHASES        default "A B"; "B" alone = only the proposed mechanisms,
 #                     so S0 -> S9 shows what remains with them
-#   H04_OC_RUN=0      skip the short `opencode run` with a free model
+#   H04_OC_RUN=1      opt-in: send one short `opencode run` to OpenCode Zen (free model)
 #   H04_KEEP_WS=1     keep the workspace at the end (manual checks), no S9
 #
 # Output: "RESULT <id> <PASS|FAIL|INFO> ..." lines (<dest>/logs/results.txt),
@@ -50,11 +50,38 @@ H04_DIR=$HERE
 	echo "refusing: \$HOME must be disposable (DITTO_SPIKE_DISPOSABLE_HOME=1; see macos.sh/docker.sh)" >&2
 	exit 2
 }
-mkdir -p "$1"
-DEST=$(cd "$1" && pwd -P)
+# Second guard: HOME is not the account's real home. In a container (the
+# image's user is disposable) anything goes; on a host it must be a fresh
+# directory under /tmp.
+_real_home=""
+if command -v getent >/dev/null 2>&1; then
+	_real_home=$(getent passwd "$(id -un)" | cut -d: -f6)
+elif command -v dscl >/dev/null 2>&1; then
+	_real_home=$(dscl . -read "/Users/$(id -un)" NFSHomeDirectory 2>/dev/null | awk '{print $2}')
+fi
+if [ ! -f /.dockerenv ]; then
+	case "$HOME" in
+	/tmp/?* | /private/tmp/?*) ;;
+	*) echo "refusing: \$HOME ($HOME) must be under /tmp or /private/tmp outside a container" >&2; exit 2 ;;
+	esac
+	if [ -z "$_real_home" ] || [ "$HOME" = "$_real_home" ]; then
+		echo "refusing: \$HOME is the account's real home (or it cannot be determined)" >&2
+		exit 2
+	fi
+fi
+# Resolve <dest> and validate the workspace before writing anything: it is
+# deleted at the end, so it may only be <dest>/w, the Docker /w or the sibling
+# <scratch>/w of macos.sh.
+_dparent=$(cd "$(dirname "$1")" 2>/dev/null && pwd -P) || { echo "parent of <dest> must exist" >&2; exit 2; }
+DEST="$_dparent/$(basename "$1")"
 PROFILE=${2:-full}
 WS=${H04_WS:-$DEST/w}
-mkdir -p "$WS"
+case "$WS" in
+"$DEST"/w | /w | "${DEST%/*}/w") ;;
+*) echo "refusing: unexpected workspace path $WS (allowed: <dest>/w, /w, <dest>/../w)" >&2; exit 2 ;;
+esac
+mkdir -p "$DEST" "$WS"
+DEST=$(cd "$DEST" && pwd -P)
 WS=$(cd "$WS" && pwd -P)
 _tmpd=${TMPDIR:-/tmp}
 # Long paths break Neovim (H0.3, "Rutas largas").
@@ -114,7 +141,11 @@ make_fixtures() {
 		  "\$schema": "https://opencode.ai/config.json",
 		  "autoupdate": false,
 		  "share": "disabled",
-		  "permission": { "bash": "deny", "edit": "deny", "webfetch": "deny" },
+		  "permission": { "bash": "deny", "edit": "deny", "webfetch": "deny", "read": "deny",
+		    "glob": "deny", "grep": "deny", "list": "deny", "task": "deny" },
+		  "tools": { "bash": false, "edit": false, "write": false, "patch": false, "webfetch": false,
+		    "read": false, "glob": false, "grep": false, "list": false, "task": false,
+		    "todowrite": false, "todoread": false },
 		  "mcp": {
 		    "envdump": { "type": "local", "enabled": true,
 		      "command": ["sh", "$HERE/../h0.2-opencode/envdump.sh", "$OUT/mcp-sh-env.txt"] },
@@ -198,7 +229,7 @@ steps_session() {
 		echo "send H04_OUT='$OUT' H04_TAG=$_t nvim \"+lua dofile('$HERE/lua/session.lua')\"; touch '$OUT/$_t-nvim.exit'"
 		echo "wait $OUT/$_t-nvim.exit 300000"
 	fi
-	echo "send H04_OC_RUN=${H04_OC_RUN:-1} sh '$HERE/oc-session.sh' '$OUT' $_t"
+	echo "send H04_OC_RUN=${H04_OC_RUN:-0} sh '$HERE/oc-session.sh' '$OUT' $_t"
 	echo "wait $OUT/$_t-oc.done 900000"
 	echo "send opencode; touch '$OUT/$_t-octui.exit'"
 	# ctrl+c quits the TUI; repeated because a slow (emulated) start may miss
@@ -364,7 +395,7 @@ fi
 # Only the workspace this script created: under <dest>, the Docker /w, or the
 # sibling <scratch>/w of macos.sh.
 case "$WS" in
-"$DEST"/* | /w | "${DEST%/*}/w") ;;
+"$DEST"/w | /w | "${DEST%/*}/w") ;;
 *) echo "refusing to delete unexpected workspace path $WS" >&2; exit 1 ;;
 esac
 [ -d "$WS/.ditto" ] || { echo "no $WS/.ditto; refusing to delete" >&2; exit 1; }

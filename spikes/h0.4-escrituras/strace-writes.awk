@@ -23,6 +23,22 @@ function cwdof(p) {
 	pid = $1
 	line = $0
 	sub(/^[0-9]+ +/, "", line)
+	# A call interrupted by another pid is printed in two pieces:
+	# "open(... <unfinished ...>" and later "<... open resumed>...) = 3".
+	# Keep the first piece per pid and join it with the second.
+	if (line ~ /<unfinished \.\.\.>$/) {
+		sub(/ *<unfinished \.\.\.>$/, "", line)
+		pend[pid] = line
+		next
+	}
+	if (line ~ /^<\.\.\. [a-z0-9_]+ resumed>/) {
+		rest = line
+		sub(/^<\.\.\. [a-z0-9_]+ resumed> ?/, "", rest)
+		if (pid in pend) {
+			line = pend[pid] rest
+			delete pend[pid]
+		}
+	}
 }
 
 # Children inherit the cwd (clone returns the child pid in the parent). With
@@ -34,7 +50,7 @@ line ~ /^(<\.\.\. )?(clone|clone3|fork|vfork)[ (]/ && match(line, /= [0-9]+$/) {
 	next
 }
 
-line ~ / = -1 / || line ~ /<unfinished \.\.\.>$/ { next }
+line ~ / = -1 / || line ~ /^<\.\.\. / { next }
 
 line ~ /^chdir\("/ {
 	split(line, q, "\"")
@@ -53,7 +69,7 @@ line ~ /^fchdir\([0-9]+</ {
 {
 	sc = line
 	sub(/\(.*/, "", sc)
-	if (sc !~ /^(open|openat|openat2|creat|mkdir|mkdirat|rename|renameat|renameat2|unlink|unlinkat|rmdir|symlink|symlinkat|link|linkat|truncate|utimensat|utimes|chmod|fchmodat|mknod|mknodat)$/) next
+	if (sc !~ /^(open|openat|openat2|creat|mkdir|mkdirat|rename|renameat|renameat2|unlink|unlinkat|rmdir|symlink|symlinkat|link|linkat|truncate|utimensat|utimes|chmod|fchmodat|fchmodat2|chown|lchown|fchownat|mknod|mknodat|setxattr|lsetxattr|removexattr|lremovexattr)$/) next
 	if (sc ~ /^(open|openat|openat2)$/ && line !~ /O_WRONLY|O_RDWR|O_CREAT|O_TRUNC/) next
 	args = line
 	sub(/^[a-z0-9]+\(/, "", args)

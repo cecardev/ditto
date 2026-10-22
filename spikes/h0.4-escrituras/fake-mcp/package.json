@@ -1,7 +1,7 @@
 {
   "name": "h04-fake-mcp",
   "version": "0.0.1",
-  "description": "Spike H0.4: fake local MCP started through npx (no network). Records its environment and exits.",
+  "description": "Spike H0.4: fake local MCP started through npx (no package download). Records its environment and exits.",
   "bin": { "h04-fake-mcp": "index.js" },
   "license": "MIT"
 }
