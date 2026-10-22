@@ -1,0 +1,9 @@
+{
+  "extras": [
+    "lazyvim.plugins.extras.lang.python",
+    "lazyvim.plugins.extras.coding.mini-surround"
+  ],
+  "install_version": 8,
+  "news": {},
+  "version": 8
+}
