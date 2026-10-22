@@ -94,6 +94,15 @@ write_git_dir() { # <dir> <label>
 }
 
 make_fixtures() {
+	# Second guard on top of DITTO_SPIKE_DISPOSABLE_HOME: never overwrite a
+	# user file. A freshly created HOME (macos.sh) or the image's /root with its
+	# skeleton rc files removed (docker.sh) has none of these.
+	for _f in .gitconfig .bashrc .zshrc .zshenv .ssh/config .config/git .xdg-config .zdot hostbin; do
+		if [ -e "$HOME/$_f" ] || [ -L "$HOME/$_f" ]; then
+			echo "refusing: \$HOME/$_f already exists; run.sh only writes its fixtures into an empty, disposable \$HOME" >&2
+			exit 2
+		fi
+	done
 	cat >"$HOME/.gitconfig" <<-'EOF'
 		[user]
 			name = Spike Gitconfig
@@ -293,7 +302,7 @@ if [ "$MODE" = lock ]; then
 	rm -rf "$_tmp"
 	cp -R "$HERE/starter" "$_tmp"
 	rm -f "$_tmp/lazy-lock.json"
-	h03_install_starter "$_tmp" >"$LOGS/starter.log" 2>&1 || { cat "$LOGS/starter.log" >&2; exit 1; }
+	H03_ALLOW_UNPINNED_LAZY=1 h03_install_starter "$_tmp" >"$LOGS/starter.log" 2>&1 || { cat "$LOGS/starter.log" >&2; exit 1; }
 	# shellcheck disable=SC2086 # word splitting of the extras list is intended
 	helper_nvim -l "$HERE/lua/merge-extras.lua" "$HERE/starter/lazyvim.json" \
 		"$DITTO_ROOT/config/nvim/lazyvim.json" $DITTO_EXTRAS

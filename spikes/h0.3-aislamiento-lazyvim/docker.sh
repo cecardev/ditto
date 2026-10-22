@@ -21,7 +21,9 @@ ubuntu-18.04 | ubuntu-22.04 | debian-12) IMAGE=$(echo "$KEY" | sed 's/-/:/') ;;
 *) echo "unknown image key: $KEY" >&2; exit 2 ;;
 esac
 TAG="ditto-h03-$KEY-$ARCH"
-printf 'FROM %s\nRUN apt-get update -qq >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates curl git openssh-client zsh >/dev/null && rm -rf /var/lib/apt/lists/*\n' "$IMAGE" |
+# The image's skeleton /root/.bashrc is removed so HOME=/root starts empty of
+# user rc files: run.sh refuses to overwrite existing ones.
+printf 'FROM %s\nRUN apt-get update -qq >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates curl git openssh-client zsh >/dev/null && rm -rf /var/lib/apt/lists/* && rm -f /root/.bashrc\n' "$IMAGE" |
 	docker build -q --platform "linux/$ARCH" -t "$TAG" - >/dev/null || exit 1
 
 echo "== $KEY linux/$ARCH ($IMAGE)" >&2

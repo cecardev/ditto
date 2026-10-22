@@ -39,10 +39,9 @@ data.extras = merged
 -- later save by LazyVim produces no diff.
 local function encode(v, indent)
   local t = type(v)
-  if t == "string" then
-    return string.format("%q", v)
-  elseif t == "number" or t == "boolean" then
-    return tostring(v)
+  if t == "string" or t == "number" or t == "boolean" then
+    -- JSON escaping (Lua's %q is not JSON for control characters).
+    return vim.json.encode(v)
   elseif t == "table" then
     local nxt = indent .. "  "
     local parts = {}
@@ -58,7 +57,7 @@ local function encode(v, indent)
     local keys = vim.tbl_keys(v)
     table.sort(keys)
     for _, k in ipairs(keys) do
-      parts[#parts + 1] = nxt .. string.format("%q", k) .. ": " .. encode(v[k], nxt)
+      parts[#parts + 1] = nxt .. vim.json.encode(tostring(k)) .. ": " .. encode(v[k], nxt)
     end
     if #parts == 0 then
       return "{}"

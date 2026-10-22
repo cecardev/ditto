@@ -41,15 +41,15 @@
 Comandos:
 
 ```sh
-# macOS (HOME/TMPDIR desechables). Ruta corta obligatoria (ver "Rutas largas").
-DITTO_SPIKE_REAL_HOME_EXCLUDE='/\.claude/worktrees/agent-|/\.docker/buildx/|/\.colima/' \
-  sh spikes/h0.3-aislamiento-lazyvim/macos.sh /private/tmp/claude-501/h03/mac
+# macOS (HOME/TMPDIR desechables). $SCRATCH corto, p. ej. /tmp/s (ver "Rutas largas").
+DITTO_SPIKE_REAL_HOME_EXCLUDE='<regex de procesos ajenos que escriben a la vez>' \
+  sh spikes/h0.3-aislamiento-lazyvim/macos.sh $SCRATCH/h03/mac
 # Linux
 sh spikes/h0.3-aislamiento-lazyvim/docker.sh "$SCRATCH/u22-arm64" arm64 ubuntu-22.04
 sh spikes/h0.3-aislamiento-lazyvim/docker.sh "$SCRATCH/u22-amd64" amd64 ubuntu-22.04
 sh spikes/h0.3-aislamiento-lazyvim/docker.sh "$SCRATCH/u18-arm64" arm64 ubuntu-18.04
 # Regenerar el lazy-lock.json del starter (red)
-sh spikes/h0.3-aislamiento-lazyvim/macos.sh /private/tmp/claude-501/h03/lock lock
+sh spikes/h0.3-aislamiento-lazyvim/macos.sh $SCRATCH/h03/lock lock
 ```
 
 Variables: `H03_SHELLS` (por defecto `zsh bash` en macOS, `bash zsh` en Docker), `H03_SCENARIOS` (`A B`), `H03_GIT_MODES` (`none global include symlink`).
@@ -94,9 +94,11 @@ Los contextos que pasan por shell dan ✅ en los cuatro modos: `.host-sh` restau
 | Ubuntu 22.04 amd64 (Docker, emulado) | bash 5.1, zsh 5.8 | 2.34.1 / OpenSSH 8.9p1 | 159 PASS, 0 FAIL, 24 XFAIL |
 | Ubuntu 18.04 arm64 (Docker, extra: Neovim legacy 0.12.5, git 2.17 sin `GIT_CONFIG_GLOBAL`) | bash 4.4, zsh 5.4 | 2.17.1 / OpenSSH 7.6p1 | 143 PASS, 0 FAIL, 24 XFAIL, 16 SKIP (lazygit) |
 
+Tras la ronda de revisión (`set -eu` en los wrappers, enlace con `ln -sfn` y protección de los fixtures) se volvieron a ejecutar macOS y Ubuntu 22.04 arm64, con el mismo resultado. Las filas de Ubuntu 22.04 amd64 y 18.04 son de la ejecución anterior.
+
 En Ubuntu 18.04 el caso lazygit se omite (`SKIP`): **lazygit 0.66 se niega a arrancar con git < 2.32** (*"Git version must be at least 2.32.0"*), así que tampoco funciona en Ubuntu 20.04 (git 2.25). No es un problema de aislamiento; el enlace `.ditto/config/git` sí funciona con git 2.17 (el modo `global` equivale allí a `none`, porque git 2.17 ignora `GIT_CONFIG_GLOBAL`).
 
-`$HOME` real del Mac: el barrido completo (`find ~ -newer <marker>`) no encontró nada relacionado con nvim, lazygit, mise, historiales, git ni ssh. Las rutas nuevas eran de procesos ajenos activos a la vez (VS Code server, colima/`~/.docker/buildx` por los `docker build` del propio spike, `~/.cache/uv`, `~/.hermes`, `apps/open-notebook`, otros worktrees de agentes y el grafo de graphify del repo principal).
+`$HOME` real del Mac: el barrido completo (`find ~ -newer <marker>`) no encontró nada relacionado con nvim, lazygit, mise, historiales, git ni ssh. Las rutas nuevas eran de procesos ajenos concurrentes (editores, otros agentes, cachés de herramientas) y de la caché de Docker que generan los `docker build` del propio spike.
 
 ## Hallazgos
 
@@ -152,9 +154,26 @@ nvim --clean -l "$H03_DIR/lua/merge-extras.lua" in.json out.json lazyvim.plugins
 - **Sesión y escrituras (#6):** `lua/pty.lua` lanza la sesión con un entorno exacto y teclea comandos; `run.sh` ya separa escrituras en `$HOME` (`T6-outside-home`) y en el temporal (`T6-outside-tmp`). Usar rutas cortas (ver *Rutas largas*).
 - **Casos interactivos:** `lua/probe.lua` muestra cómo automatizar `:terminal`, Snacks y lazygit con `chansend` en headless.
 
+Qué usar, por pieza:
+
+| Pieza | Función / archivo | Notas |
+|---|---|---|
+| Rutas | `h03_paths <dir>` (`lib.sh`) | Exporta `DITTO_ROOT` y las rutas de H0.1 |
+| Instalación | `h03_install_tools`, `h03_write_mise_config <file>`, `h03_tool <bin>` (`lib.sh`) | Usa `env.sh` y `mise.lock` de H0.1 |
+| Wrapper de nvim | `h03_write_nvim_wrapper <abs-nvim>` (`lib.sh`) | `H03_GIT_MODE`, `H03_RUNTIME_PATH`; `XDG_*`, `TMPDIR`, enlace `.ditto/config/git` |
+| Otros wrappers | `h03_write_tool_wrapper <nombre> <bin> 'VAR=valor'…`, `h03_write_wrappers` (`lib.sh`) | Restauran `DITTO_ORIG_*`; todos con `set -eu` |
+| `.host-sh` | `h03_write_host_sh` (`lib.sh`) | Sin args → sesión; `-c <cmd>` → `$SHELL` |
+| Sesión y rc | `h03_write_session` (`lib.sh`) → `.ditto/shell/{session,bashrc,zsh/.zshenv,zsh/.zshrc}` | |
+| Starter | `starter/`, `h03_install_starter [dir]` (`lib.sh`) | Falla si `lazy-lock.json` no fija lazy.nvim (salvo `H03_ALLOW_UNPINNED_LAZY=1`, solo para `run.sh … lock`) |
+| Extras | `lua/merge-extras.lua` | `nvim --clean -l merge-extras.lua <in> <out> <extra>…` |
+| pty headless | `lua/pty.lua`; `pty`/`helper_nvim` en `run.sh` | Entorno exacto por archivo `KEY=VALUE` |
+| Sondas | `probe.sh`, `lua/probe.lua`, `lua/extras-order.lua` | |
+| Fixtures y entornos | `make_fixtures`, `write_env`, `run_env`, `ditto_run`, `cmp_ctx` (`run.sh`) | `make_fixtures` se niega a escribir si ya existe algún archivo del usuario |
+| Drivers | `macos.sh`, `docker.sh` | HOME desechable; Docker borra el `/root/.bashrc` de la imagen |
+
 ## Pendientes
 
-- [ ] **TTY real** (opcional, confirma lo automatizado): en una terminal, `sh spikes/h0.3-aislamiento-lazyvim/macos.sh /private/tmp/claude-501/h03/tty` deja montado el workspace en `/private/tmp/claude-501/h03/tty/run/ws`; después `env -i HOME=/private/tmp/claude-501/h03/tty/home TMPDIR=/private/tmp/claude-501/h03/tty/tmp TERM="$TERM" SHELL=/bin/zsh PATH=/usr/bin:/bin:/usr/sbin:/sbin /private/tmp/claude-501/h03/tty/run/ws/.ditto/shell/session`, abrir `nvim`, y en `:terminal`, `<leader>gg` (lazygit) y `<C-/>` (terminal de Snacks) ejecutar `git config --show-origin --list | head` y `ssh -F ~/.ssh/config -G spike-host | head -3`. Debe coincidir con lo mismo fuera de ditto.
+- [ ] **TTY real** (opcional, confirma lo automatizado): en una terminal, `sh spikes/h0.3-aislamiento-lazyvim/macos.sh $SCRATCH/h03/tty` deja montado el workspace en `$SCRATCH/h03/tty/run/ws`; después `env -i HOME=$SCRATCH/h03/tty/home TMPDIR=$SCRATCH/h03/tty/tmp TERM="$TERM" SHELL=/bin/zsh PATH=/usr/bin:/bin:/usr/sbin:/sbin $SCRATCH/h03/tty/run/ws/.ditto/shell/session`, abrir `nvim`, y en `:terminal`, `<leader>gg` (lazygit) y `<C-/>` (terminal de Snacks) ejecutar `git config --show-origin --list | head` y `ssh -F ~/.ssh/config -G spike-host | head -3`. Debe coincidir con lo mismo fuera de ditto.
 - [ ] **Servidores reales** del usuario (bash, glibc, git de la distro): `sh spikes/h0.3-aislamiento-lazyvim/run.sh /tmp/h03 test` con `DITTO_SPIKE_DISPOSABLE_HOME=1` **solo dentro de un usuario/contenedor desechable**: escribe fixtures en `$HOME`.
 - [ ] Terminal.app (`.zsh_sessions`) y shells anidados a mano: ver *Otros*.
 - [ ] Llevar la decisión a arch.md y roadmap.md con `/record-decision` (no se editan en esta story).
@@ -183,6 +202,7 @@ Según el *Criterio de decisión* del issue, los casos de 4 que pasan por shell 
 >
 > ```sh
 > # .ditto/bin/nvim
+> set -eu
 > if [ "${DITTO_NVIM-}" != 1 ]; then        # guardar solo una vez (nvim anidado como hijo directo)
 >   # por cada VAR de XDG_{CONFIG,DATA,STATE,CACHE}_HOME, PATH, TMPDIR, GIT_CONFIG_GLOBAL:
 >   if [ -n "${VAR+x}" ]; then export DITTO_ORIG_VAR="$VAR"; fi   # ausente = no estaba definida
@@ -192,8 +212,15 @@ Según el *Criterio de decisión* del issue, los casos de 4 que pasan por shell 
 > export XDG_CONFIG_HOME="$DITTO_ROOT/config" XDG_DATA_HOME="$DITTO_ROOT/data" \
 >        XDG_STATE_HOME="$DITTO_ROOT/state"   XDG_CACHE_HOME="$DITTO_ROOT/cache"
 > # git lanzado directamente por nvim: .ditto/config/git -> git del usuario
-> ln -sfn "${DITTO_ORIG_XDG_CONFIG_HOME:-$HOME/.config}/git" "$XDG_CONFIG_HOME/git"  # si existe; si no, se quita el enlace
-> export TMPDIR="$DITTO_ROOT/tmp"
+> _g="${DITTO_ORIG_XDG_CONFIG_HOME:-$HOME/.config}/git" _l="$XDG_CONFIG_HOME/git"
+> if [ -e "$_l" ] && [ ! -L "$_l" ]; then
+>   echo "ditto: $_l is not a symlink; left untouched" >&2      # nunca se toca algo que no es nuestro
+> elif [ -d "$_g" ]; then
+>   [ "$(readlink "$_l" 2>/dev/null || true)" = "$_g" ] || ln -sfn "$_g" "$_l"   # -n: reemplaza el enlace, no entra en él (GNU y BSD)
+> elif [ -L "$_l" ]; then
+>   rm -f "$_l"                                                  # sin git del usuario: se quita el enlace (solo enlaces)
+> fi
+> export TMPDIR="$DITTO_ROOT/tmp"; mkdir -p "$TMPDIR"
 > exec "<AbsPath resuelto de nvim>" "$@"
 > ```
 >
@@ -204,6 +231,7 @@ Según el *Criterio de decisión* del issue, los casos de 4 que pasan por shell 
 > - La config de LazyVim fija `vim.o.shell = $DITTO_ROOT/bin/.host-sh` (si existe). `.host-sh` restaura los `DITTO_ORIG_*` (una variable sin `DITTO_ORIG_` se deja sin definir) y quita `DITTO_NVIM`; con argumentos hace `exec "$SHELL" "$@"` (`:!`, `system()` con string, y la clave `shell` de OpenCode con `-c <cmd>`), y sin argumentos reabre el shell de sesión con el rc de ditto (`:terminal`, terminal de Snacks). Validado: idéntico al host (`git config --show-origin --list`, `git check-ignore`, `ssh -G`, `command -v`).
 > - **Todo wrapper de ditto restaura los `DITTO_ORIG_*` antes de lanzar su herramienta**: lazygit abierto desde LazyVim (`Snacks.lazygit`) ve el git del usuario. Validado.
 > - **Procesos que nvim lanza con lista de argumentos** (gitsigns, lazy.nvim, `vim.system`, Mason) heredan el entorno de nvim. Para git, el enlace `.ditto/config/git` → `${XDG_CONFIG_HOME original:-~/.config}/git` hace que lea los mismos archivos (config, `ignore`, `attributes`, `credentials`) con la misma precedencia, en cualquier versión de git; solo cambia la ruta que muestra `--show-origin`. **Descartados:** `GIT_CONFIG_GLOBAL` (sustituye a `~/.gitconfig` en vez de sumarse, no recupera el ignore global, apunta al archivo equivocado con `XDG_CONFIG_HOME` propio y no existe antes de git 2.32) e `[include]` en `.ditto/config/git/config` (recupera la config pero no el `core.excludesFile` por defecto). Estos procesos sí ven el `PATH` de runtimes, a propósito.
+>   **Excepción explícita a "nada se escribe fuera de `.ditto/`":** `.ditto/config/git` apunta a la configuración real del host, así que lo que esos procesos git escriban en su config global (`git config --global`, `credential-store` en `$XDG_CONFIG_HOME/git/credentials`) cae en los archivos del usuario, igual que si usara git sin ditto. ditto no escribe ahí por sí mismo; solo crea el enlace dentro de `.ditto/`.
 > - El rc de la sesión (§12) apunta `HISTFILE`, `LESSHISTFILE`, `NODE_REPL_HISTORY` y `PYTHON_HISTORY` a `.ditto/state/`. Validado: ningún historial en `$HOME`.
 
 ### §9 LazyVim (sustituye las viñetas de extras y primer arranque)
