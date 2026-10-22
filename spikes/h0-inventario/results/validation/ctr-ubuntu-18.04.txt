@@ -1,0 +1,121 @@
+# ditto host inventory (spike H0, issue #3)
+format = 1
+
+[host]
+label = "ctr-ubuntu-18.04"
+date = "2026-10-22"
+in_container = "yes"
+os = "Linux"
+arch = "aarch64"
+kernel = "6.8.0-64-generic"
+distro_id = "ubuntu"
+distro_version = "18.04"
+distro_name = "Ubuntu 18.04.6 LTS"
+macos_version = ""
+macos_clt = ""
+libc = "glibc"
+libc_version = "2.27"
+libc_raw = "glibc 2.27"
+cpu_model = ""
+cpu_count = "4"
+avx2 = "n/a"
+
+[bin.git]
+category = "host-hard"
+found = false
+
+[bin.curl]
+category = "host-hard"
+found = false
+
+[bin.wget]
+category = "host-hard"
+found = false
+
+[bin.tar]
+category = "host-hard"
+found = true
+name = "tar"
+path = "/bin/tar"
+version = "1.29"
+raw = "tar (GNU tar) 1.29"
+
+[bin.unzip]
+category = "host-hard"
+found = false
+
+[bin.cc]
+category = "host-soft"
+found = false
+
+[bin.ssh]
+category = "host-soft"
+found = false
+
+[bin.shell]
+category = "host-base"
+found = false
+
+[bin.bash]
+category = "host-base"
+found = true
+name = "bash"
+path = "/bin/bash"
+version = "4.4.20"
+raw = "GNU bash, version 4.4.20(1)-release (aarch64-unknown-linux-gnu)"
+
+[bin.zsh]
+category = "host-base"
+found = false
+
+[bin.gzip]
+category = "host-base"
+found = true
+name = "gzip"
+path = "/bin/gzip"
+version = "1.6"
+raw = "gzip 1.6"
+
+[bin.xz]
+category = "host-base"
+found = false
+
+[bin.nvim]
+category = "selectable"
+found = false
+
+[bin.rg]
+category = "selectable"
+found = false
+
+[bin.fd]
+category = "selectable"
+found = false
+
+[bin.fzf]
+category = "selectable"
+found = false
+
+[bin.lazygit]
+category = "selectable"
+found = false
+
+[bin.node]
+category = "selectable"
+found = false
+
+[bin.python3]
+category = "selectable"
+found = false
+
+[bin.go]
+category = "selectable"
+found = false
+
+[bin.mise]
+category = "managed"
+found = false
+
+[bin.conda]
+category = "passthrough"
+found = false

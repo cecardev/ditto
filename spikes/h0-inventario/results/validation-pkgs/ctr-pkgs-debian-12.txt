@@ -1,0 +1,185 @@
+# ditto host inventory (spike H0, issue #3)
+format = 1
+
+[host]
+label = "ctr-pkgs-debian-12"
+date = "2026-10-22"
+in_container = "yes"
+os = "Linux"
+arch = "aarch64"
+kernel = "6.8.0-64-generic"
+distro_id = "debian"
+distro_version = "12"
+distro_name = "Debian GNU/Linux 12 (bookworm)"
+macos_version = ""
+macos_clt = ""
+libc = "glibc"
+libc_version = "2.36"
+libc_raw = "glibc 2.36"
+cpu_model = ""
+cpu_count = "4"
+avx2 = "n/a"
+
+[bin.git]
+category = "host-hard"
+found = true
+name = "git"
+path = "/usr/bin/git"
+version = "2.39.5"
+raw = "git version 2.39.5"
+
+[bin.curl]
+category = "host-hard"
+found = true
+name = "curl"
+path = "/usr/bin/curl"
+version = "7.88.1"
+raw = "curl 7.88.1 (aarch64-unknown-linux-gnu) libcurl/7.88.1 OpenSSL/3.0.22 zlib/1.2.13 brotli/1.0.9 zstd/1.5.4 libidn2/2.3.3 libpsl/0.21.2 (+libidn2/2.3.3) libssh2/1.10.0 nghttp2/1.52.0 librtmp/2.3 OpenLDAP/2.5.13"
+
+[bin.wget]
+category = "host-hard"
+found = true
+name = "wget"
+path = "/usr/bin/wget"
+version = "1.21.3"
+raw = "GNU Wget 1.21.3 built on linux-gnu."
+
+[bin.tar]
+category = "host-hard"
+found = true
+name = "tar"
+path = "/usr/bin/tar"
+version = "1.34"
+raw = "tar (GNU tar) 1.34"
+
+[bin.unzip]
+category = "host-hard"
+found = true
+name = "unzip"
+path = "/usr/bin/unzip"
+version = "6.00"
+raw = "UnZip 6.00 of 20 April 2009, by Debian. Original by Info-ZIP."
+
+[bin.cc]
+category = "host-soft"
+found = true
+name = "cc"
+path = "/usr/bin/cc"
+version = "12.2.0"
+raw = "cc (Debian 12.2.0-14+deb12u1) 12.2.0"
+
+[bin.ssh]
+category = "host-soft"
+found = true
+name = "ssh"
+path = "/usr/bin/ssh"
+version = "9.2"
+raw = "OpenSSH_9.2p1 Debian-2+deb12u10, OpenSSL 3.0.22 25 Aug 2026"
+
+[bin.shell]
+category = "host-base"
+found = true
+name = "bash"
+path = "/bin/bash"
+version = "5.2.15"
+raw = "GNU bash, version 5.2.15(1)-release (aarch64-unknown-linux-gnu)"
+
+[bin.bash]
+category = "host-base"
+found = true
+name = "bash"
+path = "/usr/bin/bash"
+version = "5.2.15"
+raw = "GNU bash, version 5.2.15(1)-release (aarch64-unknown-linux-gnu)"
+
+[bin.zsh]
+category = "host-base"
+found = true
+name = "zsh"
+path = "/usr/bin/zsh"
+version = "5.9"
+raw = "zsh 5.9 (aarch64-unknown-linux-gnu)"
+
+[bin.gzip]
+category = "host-base"
+found = true
+name = "gzip"
+path = "/usr/bin/gzip"
+version = "1.12"
+raw = "gzip 1.12"
+
+[bin.xz]
+category = "host-base"
+found = true
+name = "xz"
+path = "/usr/bin/xz"
+version = "5.4.1"
+raw = "xz (XZ Utils) 5.4.1"
+
+[bin.nvim]
+category = "selectable"
+found = true
+name = "nvim"
+path = "/usr/bin/nvim"
+version = "0.7.2"
+raw = "NVIM v0.7.2"
+
+[bin.rg]
+category = "selectable"
+found = true
+name = "rg"
+path = "/usr/bin/rg"
+version = "13.0.0"
+raw = "ripgrep 13.0.0"
+
+[bin.fd]
+category = "selectable"
+found = true
+name = "fdfind"
+path = "/usr/bin/fdfind"
+version = "8.6.0"
+raw = "fdfind 8.6.0"
+
+[bin.fzf]
+category = "selectable"
+found = true
+name = "fzf"
+path = "/usr/bin/fzf"
+version = "0.38.0"
+raw = "0.38.0 (debian)"
+
+[bin.lazygit]
+category = "selectable"
+found = false
+
+[bin.node]
+category = "selectable"
+found = true
+name = "node"
+path = "/usr/bin/node"
+version = "18.20.4"
+raw = "v18.20.4"
+
+[bin.python3]
+category = "selectable"
+found = true
+name = "python3"
+path = "/usr/bin/python3"
+version = "3.11.2"
+raw = "Python 3.11.2"
+
+[bin.go]
+category = "selectable"
+found = true
+name = "go"
+path = "/usr/bin/go"
+version = "1.19.8"
+raw = "go version go1.19.8 linux/arm64"
+
+[bin.mise]
+category = "managed"
+found = false
+
+[bin.conda]
+category = "passthrough"
+found = false

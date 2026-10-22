@@ -1,0 +1,121 @@
+# ditto host inventory (spike H0, issue #3)
+format = 1
+
+[host]
+label = "ctr-debian-12"
+date = "2026-10-22"
+in_container = "yes"
+os = "Linux"
+arch = "aarch64"
+kernel = "6.8.0-64-generic"
+distro_id = "debian"
+distro_version = "12"
+distro_name = "Debian GNU/Linux 12 (bookworm)"
+macos_version = ""
+macos_clt = ""
+libc = "glibc"
+libc_version = "2.36"
+libc_raw = "glibc 2.36"
+cpu_model = ""
+cpu_count = "4"
+avx2 = "n/a"
+
+[bin.git]
+category = "host-hard"
+found = false
+
+[bin.curl]
+category = "host-hard"
+found = false
+
+[bin.wget]
+category = "host-hard"
+found = false
+
+[bin.tar]
+category = "host-hard"
+found = true
+name = "tar"
+path = "/usr/bin/tar"
+version = "1.34"
+raw = "tar (GNU tar) 1.34"
+
+[bin.unzip]
+category = "host-hard"
+found = false
+
+[bin.cc]
+category = "host-soft"
+found = false
+
+[bin.ssh]
+category = "host-soft"
+found = false
+
+[bin.shell]
+category = "host-base"
+found = false
+
+[bin.bash]
+category = "host-base"
+found = true
+name = "bash"
+path = "/usr/bin/bash"
+version = "5.2.15"
+raw = "GNU bash, version 5.2.15(1)-release (aarch64-unknown-linux-gnu)"
+
+[bin.zsh]
+category = "host-base"
+found = false
+
+[bin.gzip]
+category = "host-base"
+found = true
+name = "gzip"
+path = "/usr/bin/gzip"
+version = "1.12"
+raw = "gzip 1.12"
+
+[bin.xz]
+category = "host-base"
+found = false
+
+[bin.nvim]
+category = "selectable"
+found = false
+
+[bin.rg]
+category = "selectable"
+found = false
+
+[bin.fd]
+category = "selectable"
+found = false
+
+[bin.fzf]
+category = "selectable"
+found = false
+
+[bin.lazygit]
+category = "selectable"
+found = false
+
+[bin.node]
+category = "selectable"
+found = false
+
+[bin.python3]
+category = "selectable"
+found = false
+
+[bin.go]
+category = "selectable"
+found = false
+
+[bin.mise]
+category = "managed"
+found = false
+
+[bin.conda]
+category = "passthrough"
+found = false
